@@ -1,0 +1,217 @@
+﻿PART 1: API ENDPOINT DESIGN (REST)
+I’ll group endpoints by domain, not by role — roles are enforced via permissions.
+
+1️⃣ AUTHENTICATION & USERS
+Auth
+POST   /api/auth/login
+POST   /api/auth/refresh
+POST   /api/auth/logout
+GET    /api/auth/me
+Users (Admin / Head Teacher)
+POST   /api/users
+GET    /api/users
+GET    /api/users/{id}
+PUT    /api/users/{id}
+DELETE /api/users/{id}
+
+2️⃣ ROLES & PERMISSIONS
+GET    /api/roles
+POST   /api/roles
+PUT    /api/roles/{id}
+Example roles:
+    • SUBJECT_TEACHER
+    • FORM_TEACHER
+    • HEAD_TEACHER
+    • ADMIN
+
+3️⃣ TEACHERS
+POST   /api/teachers
+GET    /api/teachers
+GET    /api/teachers/{id}
+PUT    /api/teachers/{id}
+Special:
+GET /api/teachers/{id}/subjects
+GET /api/teachers/{id}/classes
+
+4️⃣ STUDENTS
+POST   /api/students
+GET    /api/students
+GET    /api/students/{id}
+PUT    /api/students/{id}
+DELETE /api/students/{id}
+Filters:
+GET /api/students?class_id=3
+
+5️⃣ CLASSES & ARMS
+POST   /api/classes
+GET    /api/classes
+GET    /api/classes/{id}
+PUT    /api/classes/{id}
+GET /api/classes/{id}/students
+GET /api/classes/{id}/subjects
+
+6️⃣ SUBJECTS
+POST   /api/subjects
+GET    /api/subjects
+PUT    /api/subjects/{id}
+
+7️⃣ CLASS–SUBJECT ASSIGNMENT
+POST   /api/class-subjects
+GET    /api/class-subjects
+Payload example:
+{
+  "class_id": 2,
+  "subject_id": 5
+}
+
+8️⃣ TEACHER–SUBJECT–CLASS ASSIGNMENT
+POST   /api/teaching-assignments
+GET    /api/teaching-assignments
+Example:
+{
+  "teacher_id": 7,
+  "subject_id": 3,
+  "class_id": 2
+}
+
+9️⃣ FORM TEACHER ASSIGNMENT
+POST   /api/form-teachers
+GET    /api/form-teachers
+Only one per class per session.
+
+🔟 ACADEMIC SESSION & TERMS
+POST   /api/sessions
+GET    /api/sessions
+POST   /api/terms
+GET    /api/terms
+
+1️⃣1️⃣ ASSESSMENTS (Test, Exam)
+POST   /api/assessments
+GET    /api/assessments
+
+1️⃣2️⃣ RESULTS & SCORES
+Score Entry (Subject Teacher)
+POST /api/results
+Payload:
+{
+  "student_id": 10,
+  "subject_id": 2,
+  "assessment_id": 1,
+  "score": 18,
+  "term_id": 1,
+  "session_id": 1
+}
+Fetch Results
+GET /api/results/student/{student_id}
+GET /api/results/class/{class_id}
+GET /api/results/subject/{subject_id}
+
+1️⃣3️⃣ RESULT COMPUTATION & SUMMARY
+GET /api/results/summary/student/{student_id}
+GET /api/results/summary/class/{class_id}
+Includes:
+    • Total
+    • Average
+    • Grade
+    • Position
+
+1️⃣4️⃣ RESULT APPROVAL & LOCKING (Head Teacher)
+POST /api/results/approve/class/{class_id}
+POST /api/results/lock/class/{class_id}
+Once locked → no edits allowed.
+
+1️⃣5️⃣ FORM TEACHER REMARKS
+POST /api/remarks
+GET  /api/remarks/student/{student_id}
+
+1️⃣6️⃣ ATTENDANCE
+POST /api/attendance
+GET  /api/attendance/class/{class_id}
+
+1️⃣7️⃣ REPORTS & EXPORT
+GET /api/reports/student/{id}/pdf
+GET /api/reports/class/{id}/pdf
+
+PART 2: FASTAPI BACKEND FOLDER STRUCTURE
+This structure scales well and is industry standard.
+backend/
+│
+├── app/
+│   ├── main.py
+│   ├── core/
+│   │   ├── config.py
+│   │   ├── security.py
+│   │   ├── permissions.py
+│   │   └── dependencies.py
+│   │
+│   ├── db/
+│   │   ├── session.py
+│   │   ├── base.py
+│   │   └── init_db.py
+│   │
+│   ├── models/
+│   │   ├── user.py
+│   │   ├── role.py
+│   │   ├── teacher.py
+│   │   ├── student.py
+│   │   ├── class_.py
+│   │   ├── subject.py
+│   │   ├── result.py
+│   │   ├── attendance.py
+│   │   └── assessment.py
+│   │
+│   ├── schemas/
+│   │   ├── user.py
+│   │   ├── auth.py
+│   │   ├── teacher.py
+│   │   ├── student.py
+│   │   ├── class_.py
+│   │   ├── result.py
+│   │   └── attendance.py
+│   │
+│   ├── crud/
+│   │   ├── user.py
+│   │   ├── teacher.py
+│   │   ├── student.py
+│   │   ├── class_.py
+│   │   ├── result.py
+│   │   └── attendance.py
+│   │
+│   ├── api/
+│   │   ├── deps.py
+│   │   ├── auth.py
+│   │   ├── users.py
+│   │   ├── teachers.py
+│   │   ├── students.py
+│   │   ├── classes.py
+│   │   ├── subjects.py
+│   │   ├── results.py
+│   │   ├── attendance.py
+│   │   ├── reports.py
+│   │   └── router.py
+│   │
+│   ├── services/
+│   │   ├── grading.py
+│   │   ├── ranking.py
+│   │   ├── pdf_generator.py
+│   │   └── permissions.py
+│   │
+│   └── utils/
+│       ├── helpers.py
+│       └── constants.py
+│
+├── alembic/
+├── tests/
+├── requirements.txt
+├── Dockerfile
+└── docker-compose.yml
+
+Why This Structure Works Well
+    • api/ → routing only (thin controllers)
+    • crud/ → DB operations
+    • services/ → business logic (grades, positions)
+    • schemas/ → validation
+    • models/ → DB tables
+    • core/ → auth, config, permissions
+This is enterprise-grade, not a tutorial setup.
+

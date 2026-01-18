@@ -8,6 +8,7 @@ import {
   CardContent,
   Table,
   Badge,
+  Alert,
 } from '../../components/common';
 import {
   mockStudents,
@@ -19,7 +20,7 @@ import {
 } from '../../utils/mockData';
 import { getFullName, calculateGrade, getGradeVariant, cn } from '../../utils/helpers';
 import { CURRENT_SESSION, CURRENT_TERM, SESSIONS, TERMS, GRADE_CONFIG } from '../../utils/constants';
-import { Download, Printer, School, Users, TrendingUp, Award, BarChart3 } from 'lucide-react';
+import { Download, Printer, School, Users, TrendingUp, Award, BarChart3, CheckCircle2 } from 'lucide-react';
 
 const ClassReport: React.FC = () => {
   const [selectedClass, setSelectedClass] = useState('');
@@ -247,6 +248,16 @@ const ClassReport: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Approved Results Notice */}
+      {selectedClass && (
+        <Alert variant="info">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5" />
+            <span>This report shows only approved results from the admin dashboard.</span>
+          </div>
+        </Alert>
+      )}
 
       {currentClass && (
         <>

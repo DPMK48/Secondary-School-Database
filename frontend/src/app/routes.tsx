@@ -8,7 +8,7 @@ import { StudentList, StudentDetail } from '../features/students';
 import { TeacherList, TeacherDetail, AssignSubjects } from '../features/teachers';
 import { ClassList, ClassStudents } from '../features/classes';
 import { SubjectList } from '../features/subjects';
-import { ScoreEntry, ResultSummary, ResultApproval, ResultsHub } from '../features/results';
+import { ScoreEntry, ResultSummary, ResultApproval, ResultsHub, SubjectTeacherScoreEntry, FormTeacherResultCompilation } from '../features/results';
 import { AttendanceEntry, AttendanceView, AttendanceHub } from '../features/attendance';
 import { StudentReport, ClassReport, ReportsHub } from '../features/reports';
 import { Profile } from '../features/profile';
@@ -80,7 +80,7 @@ const AppRoutes: React.FC = () => {
         <Route
           path="classes"
           element={
-            <RoleGuard allowedRoles={['admin', 'form_teacher']}>
+            <RoleGuard allowedRoles={['admin', 'form_teacher', 'subject_teacher']}>
               <ClassList />
             </RoleGuard>
           }
@@ -88,7 +88,7 @@ const AppRoutes: React.FC = () => {
         <Route
           path="classes/:id"
           element={
-            <RoleGuard allowedRoles={['admin', 'form_teacher']}>
+            <RoleGuard allowedRoles={['admin', 'form_teacher', 'subject_teacher']}>
               <ClassStudents />
             </RoleGuard>
           }
@@ -115,6 +115,22 @@ const AppRoutes: React.FC = () => {
           }
         />
         <Route
+          path="results/subject-teacher-entry"
+          element={
+            <RoleGuard allowedRoles={['subject_teacher']}>
+              <SubjectTeacherScoreEntry />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="results/form-teacher-compilation"
+          element={
+            <RoleGuard allowedRoles={['form_teacher', 'admin']}>
+              <FormTeacherResultCompilation />
+            </RoleGuard>
+          }
+        />
+        <Route
           path="results/summary"
           element={
             <RoleGuard allowedRoles={['admin', 'form_teacher']}>
@@ -131,11 +147,11 @@ const AppRoutes: React.FC = () => {
           }
         />
 
-        {/* Attendance */}
+        {/* Attendance - Admin Only */}
         <Route
           path="attendance"
           element={
-            <RoleGuard allowedRoles={['admin', 'form_teacher']}>
+            <RoleGuard allowedRoles={['admin']}>
               <AttendanceHub />
             </RoleGuard>
           }
@@ -143,7 +159,7 @@ const AppRoutes: React.FC = () => {
         <Route
           path="attendance/entry"
           element={
-            <RoleGuard allowedRoles={['form_teacher']}>
+            <RoleGuard allowedRoles={['admin']}>
               <AttendanceEntry />
             </RoleGuard>
           }
@@ -151,7 +167,7 @@ const AppRoutes: React.FC = () => {
         <Route
           path="attendance/view"
           element={
-            <RoleGuard allowedRoles={['admin', 'form_teacher']}>
+            <RoleGuard allowedRoles={['admin']}>
               <AttendanceView />
             </RoleGuard>
           }

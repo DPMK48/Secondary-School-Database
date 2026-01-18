@@ -134,4 +134,47 @@ export const resultsApi = {
    */
   getStatistics: (params?: { class_id?: number; subject_id?: number; term_id?: number; session_id?: number }) =>
     api.get<ApiResponse<any>>('/results/statistics', { params }),
+
+  /**
+   * Get compiled results for form teacher (all subjects for a class)
+   */
+  getFormTeacherCompilation: (classId: number, params?: { term_id?: number; session_id?: number }) =>
+    api.get<ApiResponse<any>>(`/results/form-teacher/class/${classId}/compilation`, { params }),
+
+  /**
+   * Get student's all subject scores (for form teacher view)
+   */
+  getStudentAllSubjects: (studentId: number, params?: { term_id?: number; session_id?: number }) =>
+    api.get<ApiResponse<any>>(`/results/student/${studentId}/all-subjects`, { params }),
+
+  /**
+   * Bulk save scores for subject teacher
+   */
+  bulkSaveSubjectScores: (data: {
+    class_id: number;
+    subject_id: number;
+    teacher_id: number;
+    session_id: number;
+    term_id: number;
+    scores: Array<{
+      student_id: number;
+      test1?: number;
+      test2?: number;
+      test3?: number;
+      exam?: number;
+    }>;
+  }) =>
+    api.post<ApiResponse<any>>('/results/subject-teacher/bulk-save', data),
+
+  /**
+   * Get subject teacher's assigned classes and subjects
+   */
+  getSubjectTeacherAssignments: (teacherId: number) =>
+    api.get<ApiResponse<any>>(`/results/subject-teacher/${teacherId}/assignments`),
+
+  /**
+   * Calculate and get student average
+   */
+  calculateStudentAverage: (studentId: number, params: { class_id: number; term_id: number; session_id: number }) =>
+    api.get<ApiResponse<{ average: number; total: number; subjects_count: number; grade: string }>>(`/results/student/${studentId}/average`, { params }),
 };

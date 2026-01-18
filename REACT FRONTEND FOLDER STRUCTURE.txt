@@ -1,0 +1,152 @@
+﻿REACT FRONTEND FOLDER STRUCTURE (PRODUCTION-READY)
+Using React + Vite + TypeScript.
+frontend/
+│
+├── public/
+│   └── logo.svg
+│
+├── src/
+│   ├── app/
+│   │   ├── App.tsx
+│   │   ├── main.tsx
+│   │   └── routes.tsx
+│   │
+│   ├── assets/
+│   │   ├── images/
+│   │   └── icons/
+│   │
+│   ├── components/
+│   │   ├── common/
+│   │   │   ├── Button.tsx
+│   │   │   ├── Input.tsx
+│   │   │   ├── Modal.tsx
+│   │   │   └── Table.tsx
+│   │   │
+│   │   ├── layout/
+│   │   │   ├── DashboardLayout.tsx
+│   │   │   ├── Sidebar.tsx
+│   │   │   ├── Navbar.tsx
+│   │   │   └── Footer.tsx
+│   │   │
+│   │   └── charts/
+│   │       ├── ResultChart.tsx
+│   │       └── AttendanceChart.tsx
+│   │
+│   ├── features/
+│   │   ├── auth/
+│   │   │   ├── Login.tsx
+│   │   │   ├── auth.api.ts
+│   │   │   ├── auth.slice.ts
+│   │   │   └── auth.types.ts
+│   │   │
+│   │   ├── students/
+│   │   │   ├── StudentList.tsx
+│   │   │   ├── StudentDetail.tsx
+│   │   │   ├── students.api.ts
+│   │   │   └── students.types.ts
+│   │   │
+│   │   ├── teachers/
+│   │   │   ├── TeacherList.tsx
+│   │   │   ├── AssignSubjects.tsx
+│   │   │   └── teachers.api.ts
+│   │   │
+│   │   ├── classes/
+│   │   │   ├── ClassList.tsx
+│   │   │   ├── ClassStudents.tsx
+│   │   │   └── classes.api.ts
+│   │   │
+│   │   ├── subjects/
+│   │   │   ├── SubjectList.tsx
+│   │   │   └── subjects.api.ts
+│   │   │
+│   │   ├── results/
+│   │   │   ├── ScoreEntry.tsx
+│   │   │   ├── ResultSummary.tsx
+│   │   │   ├── ResultApproval.tsx
+│   │   │   ├── results.api.ts
+│   │   │   └── results.types.ts
+│   │   │
+│   │   ├── attendance/
+│   │   │   ├── AttendanceEntry.tsx
+│   │   │   ├── AttendanceView.tsx
+│   │   │   └── attendance.api.ts
+│   │   │
+│   │   └── reports/
+│   │       ├── StudentReport.tsx
+│   │       ├── ClassReport.tsx
+│   │       └── reports.api.ts
+│   │
+│   ├── hooks/
+│   │   ├── useAuth.ts
+│   │   ├── useRole.ts
+│   │   └── useDebounce.ts
+│   │
+│   ├── services/
+│   │   ├── api.ts
+│   │   ├── axios.ts
+│   │   └── token.service.ts
+│   │
+│   ├── store/
+│   │   ├── index.ts
+│   │   └── auth.store.ts
+│   │
+│   ├── guards/
+│   │   ├── ProtectedRoute.tsx
+│   │   └── RoleGuard.tsx
+│   │
+│   ├── utils/
+│   │   ├── constants.ts
+│   │   ├── helpers.ts
+│   │   └── permissions.ts
+│   │
+│   ├── styles/
+│   │   └── index.css
+│   │
+│   └── types/
+│       └── index.ts
+│
+├── .env
+├── vite.config.ts
+├── tsconfig.json
+└── package.json
+
+HOW THIS MAPS TO SCHOOL ROLES
+Subject Teacher
+    • features/results/ScoreEntry.tsx
+    • Can only access:
+        ◦ Assigned classes
+        ◦ Assigned subjects
+Form Teacher
+    • features/results/ResultSummary.tsx
+    • features/reports/ClassReport.tsx
+    • features/attendance/*
+    • Add remarks
+
+Admin
+    • Manage users, classes, subjects, teachers
+    • ResultApproval.tsx
+    • Attendance overview
+    • Lock results
+
+ROUTING STRUCTURE (IMPORTANT)
+Example route grouping:
+/login
+
+/dashboard
+/dashboard/students
+/dashboard/classes
+/dashboard/results
+/dashboard/results/approve
+/dashboard/reports
+/dashboard/attendance
+With:
+    • ProtectedRoute → authenticated users
+    • RoleGuard → role-based access
+
+WHY THIS STRUCTURE IS IDEAL
+✔ Feature-based (easy to scale)
+✔ Clean separation of concerns
+✔ Works perfectly with FastAPI
+✔ Easy to onboard junior devs/students
+✔ Suitable for real school deployment
+

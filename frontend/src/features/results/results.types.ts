@@ -98,6 +98,53 @@ export interface ResultLockData {
   lock_date: string;
 }
 
+// Form Teacher Result Compilation Types
+export interface StudentSubjectScore {
+  student_id: number;
+  student_name: string;
+  admission_no: string;
+  subject_scores: Array<{
+    subject_id: number;
+    subject_name: string;
+    test1?: number;
+    test2?: number;
+    test3?: number;
+    exam?: number;
+    total: number;
+    grade: string;
+    remark: string;
+  }>;
+  total_score: number;
+  average_score: number;
+  number_of_subjects: number;
+  overall_grade: string;
+  position?: number;
+}
+
+export interface FormTeacherResultView {
+  class_id: number;
+  class_name: string;
+  term_id: number;
+  session_id: number;
+  students: StudentSubjectScore[];
+  class_average: number;
+  highest_average: number;
+  lowest_average: number;
+}
+
+// Subject Teacher Score Entry
+export interface SubjectScoreEntry {
+  student_id: number;
+  student_name: string;
+  admission_no: string;
+  test1?: number;
+  test2?: number;
+  test3?: number;
+  exam?: number;
+  total?: number;
+  saved: boolean;
+}
+
 export interface ResultFilters {
   student_id?: number;
   class_id?: number;

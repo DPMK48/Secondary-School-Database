@@ -12,7 +12,6 @@ import {
   BookOpen,
   TrendingUp,
   Activity,
-  ArrowUpRight,
   Clock,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -20,6 +19,8 @@ import { Link } from 'react-router-dom';
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const { canManageStudents, canManageTeachers, canManageClasses, canManageSubjects } = useRole();
+  const isSubjectTeacher = user?.role === 'subject_teacher';
+  const isFormTeacher = user?.role === 'form_teacher';
 
   const stats = mockDashboardStats;
 
@@ -117,7 +118,7 @@ const Dashboard: React.FC = () => {
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Activities */}
-        <div className="lg:col-span-2">
+        <div className={(isSubjectTeacher || isFormTeacher) ? "lg:col-span-3" : "lg:col-span-2"}>
           <Card>
             <CardHeader>
               <CardTitle>
@@ -156,85 +157,48 @@ const Dashboard: React.FC = () => {
           </Card>
         </div>
 
-        {/* Quick Actions & Classes Overview */}
-        <div className="space-y-6">
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <Link
-                  to="/dashboard/results/entry"
-                  className="flex items-center justify-between p-3 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors"
-                >
-                  <span className="font-medium">Enter Results</span>
-                  <ArrowUpRight className="h-5 w-5" />
-                </Link>
-                <Link
-                  to="/dashboard/students"
-                  className="flex items-center justify-between p-3 bg-green-50 text-green-700 rounded-xl hover:bg-green-100 transition-colors"
-                >
-                  <span className="font-medium">View Students</span>
-                  <ArrowUpRight className="h-5 w-5" />
-                </Link>
-                <Link
-                  to="/dashboard/reports"
-                  className="flex items-center justify-between p-3 bg-purple-50 text-purple-700 rounded-xl hover:bg-purple-100 transition-colors"
-                >
-                  <span className="font-medium">Generate Reports</span>
-                  <ArrowUpRight className="h-5 w-5" />
-                </Link>
-                <Link
-                  to="/dashboard/attendance"
-                  className="flex items-center justify-between p-3 bg-orange-50 text-orange-700 rounded-xl hover:bg-orange-100 transition-colors"
-                >
-                  <span className="font-medium">Record Attendance</span>
-                  <ArrowUpRight className="h-5 w-5" />
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Classes Overview */}
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <div className="flex items-center gap-2">
-                  <School className="h-5 w-5 text-primary-600" />
-                  Classes Overview
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3 max-h-64 overflow-y-auto">
-                {mockClasses.slice(0, 6).map((cls) => (
-                  <div
-                    key={cls.id}
-                    className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg"
-                  >
-                    <div>
-                      <p className="font-medium text-secondary-900">
-                        {getClassDisplayName(cls)}
-                      </p>
-                      <p className="text-xs text-secondary-500">{cls.level}</p>
-                    </div>
-                    <Badge variant={cls.level === 'Senior' ? 'primary' : 'info'}>
-                      {cls.students_count} students
-                    </Badge>
+        {/* Quick Actions & Classes Overview - For Admin Only */}
+        {!isSubjectTeacher && !isFormTeacher && (
+          <div className="space-y-6">
+            {/* Classes Overview */}
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <div className="flex items-center gap-2">
+                    <School className="h-5 w-5 text-primary-600" />
+                    Classes Overview
                   </div>
-                ))}
-              </div>
-              <Link
-                to="/dashboard/classes"
-                className="block text-center text-sm text-primary-600 font-medium mt-4 hover:underline"
-              >
-                View all classes →
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {mockClasses.slice(0, 6).map((cls) => (
+                    <div
+                      key={cls.id}
+                      className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg"
+                    >
+                      <div>
+                        <p className="font-medium text-secondary-900">
+                          {getClassDisplayName(cls)}
+                        </p>
+                        <p className="text-xs text-secondary-500">{cls.level}</p>
+                      </div>
+                      <Badge variant={cls.level === 'Senior' ? 'primary' : 'info'}>
+                        {cls.students_count} students
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+                <Link
+                  to="/dashboard/classes"
+                  className="block text-center text-sm text-primary-600 font-medium mt-4 hover:underline"
+                >
+                  View all classes →
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

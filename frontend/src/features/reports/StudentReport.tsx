@@ -5,6 +5,7 @@ import {
   Card,
   CardContent,
   Badge,
+  Alert,
 } from '../../components/common';
 import {
   mockStudents,
@@ -17,7 +18,7 @@ import {
 } from '../../utils/mockData';
 import { getFullName, formatDate, calculateGrade, getGradeVariant } from '../../utils/helpers';
 import { CURRENT_SESSION, CURRENT_TERM, SESSIONS, TERMS, GRADE_CONFIG, APP_CONFIG } from '../../utils/constants';
-import { Download, Printer, User, BookOpen, Calendar, School, Star } from 'lucide-react';
+import { Download, Printer, User, BookOpen, Calendar, School, Star, CheckCircle2 } from 'lucide-react';
 
 const StudentReport: React.FC = () => {
   const [selectedStudent, setSelectedStudent] = useState('');
@@ -135,6 +136,16 @@ const StudentReport: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Approved Results Notice */}
+      {selectedStudent && (
+        <Alert variant="info">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5" />
+            <span>This report shows only approved results from the admin dashboard.</span>
+          </div>
+        </Alert>
+      )}
 
       {/* Report Card */}
       {student && studentClass && resultSummary && (

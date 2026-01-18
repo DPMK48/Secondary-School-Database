@@ -69,6 +69,16 @@ const SubjectList: React.FC = () => {
     setShowDeleteModal(true);
   };
 
+  const handleEdit = (subject: Subject) => {
+    setSelectedSubject(subject);
+    setNewSubject({
+      name: subject.subject_name,
+      code: subject.subject_code,
+      level: subject.level || '',
+    });
+    setShowAddModal(true);
+  };
+
   const confirmDelete = () => {
     console.log('Deleting subject:', selectedSubject?.id);
     setShowDeleteModal(false);
@@ -76,9 +86,20 @@ const SubjectList: React.FC = () => {
   };
 
   const handleAddSubject = () => {
-    console.log('Adding subject:', newSubject);
+    if (selectedSubject) {
+      console.log('Updating subject:', selectedSubject.id, newSubject);
+    } else {
+      console.log('Adding subject:', newSubject);
+    }
     setShowAddModal(false);
     setNewSubject({ name: '', code: '', level: '' });
+    setSelectedSubject(null);
+  };
+
+  const handleCloseModal = () => {
+    setShowAddModal(false);
+    setNewSubject({ name: '', code: '', level: '' });
+    setSelectedSubject(null);
   };
 
   const levelOptions = [
@@ -157,7 +178,7 @@ const SubjectList: React.FC = () => {
       render: (_value: unknown, row: Subject) =>
         canManageSubjects ? (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={() => handleEdit(row)}>
               <Edit className="h-4 w-4" />
             </Button>
             <Button variant="ghost" size="sm" onClick={() => handleDelete(row)}>
@@ -247,18 +268,20 @@ const SubjectList: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Add Subject Modal */}
+      {/* Add/Edit Subject Modal */}
       <Modal
         isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        title="Add New Subject"
+        onClose={handleCloseModal}
+        title={selectedSubject ? 'Edit Subject' : 'Add New Subject'}
         size="md"
         footer={
           <>
-            <Button variant="outline" onClick={() => setShowAddModal(false)}>
+            <Button variant="outline" onClick={handleCloseModal}>
               Cancel
             </Button>
-            <Button onClick={handleAddSubject}>Add Subject</Button>
+            <Button onClick={handleAddSubject}>
+              {selectedSubject ? 'Update Subject' : 'Add Subject'}
+            </Button>
           </>
         }
       >

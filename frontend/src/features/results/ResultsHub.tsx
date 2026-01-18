@@ -2,19 +2,38 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button } from '../../components/common';
 import { useRole } from '../../hooks/useRole';
-import { Edit, CheckCircle, FileText, TrendingUp } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
+import { Edit, CheckCircle, FileText, BookOpen, ClipboardList } from 'lucide-react';
 
 const ResultsHub: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { canEnterScores, canViewAllResults, canApproveResults } = useRole();
+  const isSubjectTeacher = user?.role === 'subject_teacher';
 
   const sections = [
     {
-      title: 'Score Entry',
-      description: 'Enter and manage student scores for assigned subjects',
+      title: 'Subject Teacher Entry',
+      description: 'Enter grades for students in your assigned subjects (all assessments)',
       icon: Edit,
-      path: '/dashboard/results/entry',
+      path: '/dashboard/results/subject-teacher-entry',
       color: 'bg-blue-500',
+      show: canEnterScores,
+    },
+    {
+      title: 'Form Teacher Compilation',
+      description: 'View compiled results from all subjects with automatic average calculation',
+      icon: ClipboardList,
+      path: '/dashboard/results/form-teacher-compilation',
+      color: 'bg-indigo-500',
+      show: canViewAllResults,
+    },
+    {
+      title: 'Score Entry (Classic)',
+      description: 'Enter and manage student scores for assigned subjects',
+      icon: BookOpen,
+      path: '/dashboard/results/entry',
+      color: 'bg-cyan-500',
       show: canEnterScores,
     },
     {
@@ -76,40 +95,42 @@ const ResultsHub: React.FC = () => {
         })}
       </div>
 
-      {/* Quick Stats */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
-            Recent Activity
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg">
-              <div>
-                <p className="font-medium text-secondary-900">Scores Entered Today</p>
-                <p className="text-sm text-secondary-500">Across all subjects</p>
+      {/* Quick Stats - For non-subject teachers */}
+      {!isSubjectTeacher && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Quick Stats
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg">
+                <div>
+                  <p className="font-medium text-secondary-900">Scores Entered Today</p>
+                  <p className="text-sm text-secondary-500">Across all subjects</p>
+                </div>
+                <span className="text-2xl font-bold text-primary-600">45</span>
               </div>
-              <span className="text-2xl font-bold text-primary-600">45</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg">
-              <div>
-                <p className="font-medium text-secondary-900">Pending Approvals</p>
-                <p className="text-sm text-secondary-500">Classes awaiting review</p>
+              <div className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg">
+                <div>
+                  <p className="font-medium text-secondary-900">Pending Approvals</p>
+                  <p className="text-sm text-secondary-500">Classes awaiting review</p>
+                </div>
+                <span className="text-2xl font-bold text-yellow-600">3</span>
               </div>
-              <span className="text-2xl font-bold text-yellow-600">3</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg">
-              <div>
-                <p className="font-medium text-secondary-900">Completed Results</p>
-                <p className="text-sm text-secondary-500">Published this term</p>
+              <div className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg">
+                <div>
+                  <p className="font-medium text-secondary-900">Completed Results</p>
+                  <p className="text-sm text-secondary-500">Published this term</p>
+                </div>
+                <span className="text-2xl font-bold text-green-600">12</span>
               </div>
-              <span className="text-2xl font-bold text-green-600">12</span>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

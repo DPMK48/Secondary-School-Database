@@ -10,6 +10,7 @@ import {
   Badge,
   Avatar,
   Alert,
+  Spinner,
 } from '../../components/common';
 import {
   mockStudents,
@@ -17,15 +18,15 @@ import {
   getClassDisplayName,
 } from '../../utils/mockData';
 import { getFullName, formatDate, cn } from '../../utils/helpers';
-import { Save, Calendar, CheckCircle, XCircle, Clock, Users, AlertCircle } from 'lucide-react';
+import { Save, Calendar, CheckCircle, XCircle, Users, Check } from 'lucide-react';
+// import { attendanceApi } from './attendance.api';
 import { useRole } from '../../hooks/useRole';
 
-type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
+type AttendanceStatus = 'Present' | 'Absent';
 
 interface AttendanceRecord {
   student_id: number;
   status: AttendanceStatus;
-  remarks?: string;
 }
 
 const AttendanceEntry: React.FC = () => {
@@ -36,6 +37,10 @@ const AttendanceEntry: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(today);
   const [attendance, setAttendance] = useState<{ [studentId: number]: AttendanceRecord }>({});
   const [isSaved, setIsSaved] = useState(false);
+  const [isLoading, _setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Get students in selected class
   const classStudents = useMemo(() => {
@@ -44,17 +49,23 @@ const AttendanceEntry: React.FC = () => {
     return mockStudents.filter((s) => s.current_class_id === classId && s.status === 'Active');
   }, [selectedClass]);
 
-  // Initialize attendance for all students as present
+  // Initialize attendance when class/date changes
   useEffect(() => {
+    if (selectedClass && selectedDate && classStudents.length > 0) {
+      initializeAttendance();
+    }
+  }, [selectedClass, selectedDate, classStudents.length]);
+
+  const initializeAttendance = () => {
     if (classStudents.length > 0) {
       const initialAttendance: { [studentId: number]: AttendanceRecord } = {};
       classStudents.forEach((student) => {
-        initialAttendance[student.id] = { student_id: student.id, status: 'present' };
+        initialAttendance[student.id] = { student_id: student.id, status: 'Present' };
       });
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAttendance(initialAttendance);
+      setIsSaved(false);
     }
-  }, [classStudents]);
+  };
 
   const handleStatusChange = (studentId: number, status: AttendanceStatus) => {
     setAttendance({
@@ -62,33 +73,69 @@ const AttendanceEntry: React.FC = () => {
       [studentId]: { ...attendance[studentId], student_id: studentId, status },
     });
     setIsSaved(false);
+    setError(null);
+    setSuccessMessage(null);
   };
 
-  const handleSave = () => {
-    console.log('Saving attendance:', {
-      class: selectedClass,
-      date: selectedDate,
-      records: Object.values(attendance),
-    });
-    setIsSaved(true);
+  const handleSave = async () => {
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const records = Object.values(attendance);
+
+      // Simulate saving (remove this and use real API when backend is ready)
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // TODO: Uncomment when backend API is ready
+      // const classId = parseInt(selectedClass);
+      // const sessionId = 1;
+      // const termId = 1;
+      // const bulkData = {
+      //   class_id: classId,
+      //   date: selectedDate,
+      //   session_id: sessionId,
+      //   term_id: termId,
+      //   records: records.map((r) => ({
+      //     student_id: r.student_id,
+      //     status: r.status,
+      //   })),
+      // };
+      // const response = await attendanceApi.bulkCreate(bulkData);
+
+      setIsSaved(true);
+      setSuccessMessage(`Attendance saved successfully for ${records.length} students`);
+      // Auto-hide success message after 5 seconds
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } catch (err: any) {
+      console.error('Error saving attendance:', err);
+      setError('Failed to save attendance. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const markAllPresent = () => {
     const newAttendance: { [studentId: number]: AttendanceRecord } = {};
     classStudents.forEach((student) => {
-      newAttendance[student.id] = { student_id: student.id, status: 'present' };
+      newAttendance[student.id] = { student_id: student.id, status: 'Present' };
     });
     setAttendance(newAttendance);
     setIsSaved(false);
+    setError(null);
+    setSuccessMessage(null);
   };
 
   const markAllAbsent = () => {
     const newAttendance: { [studentId: number]: AttendanceRecord } = {};
     classStudents.forEach((student) => {
-      newAttendance[student.id] = { student_id: student.id, status: 'absent' };
+      newAttendance[student.id] = { student_id: student.id, status: 'Absent' };
     });
     setAttendance(newAttendance);
     setIsSaved(false);
+    setError(null);
+    setSuccessMessage(null);
   };
 
   const classOptions = mockClasses.map((c) => ({
@@ -100,10 +147,8 @@ const AttendanceEntry: React.FC = () => {
   const stats = useMemo(() => {
     const records = Object.values(attendance);
     return {
-      present: records.filter((r) => r.status === 'present').length,
-      absent: records.filter((r) => r.status === 'absent').length,
-      late: records.filter((r) => r.status === 'late').length,
-      excused: records.filter((r) => r.status === 'excused').length,
+      present: records.filter((r) => r.status === 'Present').length,
+      absent: records.filter((r) => r.status === 'Absent').length,
     };
   }, [attendance]);
 
@@ -119,13 +164,9 @@ const AttendanceEntry: React.FC = () => {
       className={cn(
         'flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
         status === currentStatus
-          ? status === 'present'
-            ? 'bg-success-100 text-success-700 ring-1 ring-success-500'
-            : status === 'absent'
-            ? 'bg-danger-100 text-danger-700 ring-1 ring-danger-500'
-            : status === 'late'
-            ? 'bg-warning-100 text-warning-700 ring-1 ring-warning-500'
-            : 'bg-info-100 text-info-700 ring-1 ring-info-500'
+          ? status === 'Present'
+            ? 'bg-success-100 text-success-700 ring-2 ring-success-500'
+            : 'bg-danger-100 text-danger-700 ring-2 ring-danger-500'
           : 'bg-secondary-100 text-secondary-600 hover:bg-secondary-200'
       )}
     >
@@ -168,40 +209,26 @@ const AttendanceEntry: React.FC = () => {
     },
     {
       key: 'status',
-      label: 'Status',
+      label: 'Attendance Status',
       render: (_value: unknown, row: (typeof mockStudents)[0]) => {
         const record = attendance[row.id];
-        const currentStatus = record?.status || 'present';
+        const currentStatus = record?.status || 'Present';
         
         return (
           <div className="flex gap-2">
             <StatusButton
-              status="present"
+              status="Present"
               currentStatus={currentStatus}
-              onClick={() => handleStatusChange(row.id, 'present')}
+              onClick={() => handleStatusChange(row.id, 'Present')}
               icon={<CheckCircle className="h-4 w-4" />}
               label="Present"
             />
             <StatusButton
-              status="absent"
+              status="Absent"
               currentStatus={currentStatus}
-              onClick={() => handleStatusChange(row.id, 'absent')}
+              onClick={() => handleStatusChange(row.id, 'Absent')}
               icon={<XCircle className="h-4 w-4" />}
               label="Absent"
-            />
-            <StatusButton
-              status="late"
-              currentStatus={currentStatus}
-              onClick={() => handleStatusChange(row.id, 'late')}
-              icon={<Clock className="h-4 w-4" />}
-              label="Late"
-            />
-            <StatusButton
-              status="excused"
-              currentStatus={currentStatus}
-              onClick={() => handleStatusChange(row.id, 'excused')}
-              icon={<AlertCircle className="h-4 w-4" />}
-              label="Excused"
             />
           </div>
         );
@@ -219,10 +246,24 @@ const AttendanceEntry: React.FC = () => {
         </div>
       </div>
 
+      {/* Error Alert */}
+      {error && (
+        <Alert variant="error" title="Error">
+          {error}
+        </Alert>
+      )}
+
+      {/* Success Alert */}
+      {successMessage && (
+        <Alert variant="success" title="Success">
+          {successMessage}
+        </Alert>
+      )}
+
       {/* Info Alert for Form Teachers */}
       {isFormTeacher && (
         <Alert variant="info" title="Form Teacher Access">
-          You can mark daily attendance for your assigned class. This feature is exclusively for form teachers.
+          You can mark daily attendance for your assigned class. Students are automatically marked as Present by default.
         </Alert>
       )}
 
@@ -264,7 +305,7 @@ const AttendanceEntry: React.FC = () => {
       {/* Statistics & Actions */}
       {selectedClass && (
         <div className="flex flex-col md:flex-row gap-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1">
+          <div className="grid grid-cols-2 gap-4 flex-1">
             <Card padding="sm">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-success-100 flex items-center justify-center">
@@ -287,75 +328,70 @@ const AttendanceEntry: React.FC = () => {
                 </div>
               </div>
             </Card>
-            <Card padding="sm">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-warning-100 flex items-center justify-center">
-                  <Clock className="h-5 w-5 text-warning-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-secondary-500">Late</p>
-                  <p className="text-xl font-bold text-warning-600">{stats.late}</p>
-                </div>
-              </div>
-            </Card>
-            <Card padding="sm">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-info-100 flex items-center justify-center">
-                  <AlertCircle className="h-5 w-5 text-info-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-secondary-500">Excused</p>
-                  <p className="text-xl font-bold text-info-600">{stats.excused}</p>
-                </div>
-              </div>
-            </Card>
           </div>
         </div>
       )}
 
       {/* Attendance Table */}
       {selectedClass && (
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <CardTitle>
-                  {mockClasses.find((c) => c.id === parseInt(selectedClass))
-                    ? getClassDisplayName(mockClasses.find((c) => c.id === parseInt(selectedClass))!)
-                    : ''}{' '}
-                  - {formatDate(selectedDate)}
-                </CardTitle>
-                <p className="text-sm text-secondary-500 mt-1">
-                  <Users className="h-4 w-4 inline mr-1" />
-                  {classStudents.length} students
-                </p>
+        <>
+          {isLoading ? (
+            <Card>
+              <div className="flex items-center justify-center py-12">
+                <Spinner size="lg" />
+                <span className="ml-3 text-secondary-600">Loading attendance data...</span>
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={markAllPresent}>
-                  Mark All Present
-                </Button>
-                <Button variant="outline" size="sm" onClick={markAllAbsent}>
-                  Mark All Absent
-                </Button>
-                <Button
-                  leftIcon={<Save className="h-4 w-4" />}
-                  onClick={handleSave}
-                  disabled={isSaved}
-                >
-                  {isSaved ? 'Saved' : 'Save Attendance'}
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Table
-              columns={columns}
-              data={classStudents}
-              keyExtractor={(item) => item.id.toString()}
-              emptyMessage="No students found"
-            />
-          </CardContent>
-        </Card>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <CardTitle>
+                      {mockClasses.find((c) => c.id === parseInt(selectedClass))
+                        ? getClassDisplayName(mockClasses.find((c) => c.id === parseInt(selectedClass))!)
+                        : ''}{' '}
+                      - {formatDate(selectedDate)}
+                    </CardTitle>
+                    <p className="text-sm text-secondary-500 mt-1">
+                      <Users className="h-4 w-4 inline mr-1" />
+                      {classStudents.length} students
+                      {isSaved && (
+                        <Badge variant="success" size="sm" className="ml-2">
+                          <Check className="h-3 w-3 mr-1" />
+                          Saved
+                        </Badge>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={markAllPresent} disabled={isSaving}>
+                      Mark All Present
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={markAllAbsent} disabled={isSaving}>
+                      Mark All Absent
+                    </Button>
+                    <Button
+                      leftIcon={isSaving ? <Spinner size="sm" /> : <Save className="h-4 w-4" />}
+                      onClick={handleSave}
+                      disabled={isSaved || isSaving}
+                    >
+                      {isSaving ? 'Saving...' : isSaved ? 'Saved' : 'Save Attendance'}
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table
+                  columns={columns}
+                  data={classStudents}
+                  keyExtractor={(item) => item.id.toString()}
+                  emptyMessage="No students found"
+                />
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
       {!selectedClass && (
