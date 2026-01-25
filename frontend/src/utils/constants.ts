@@ -4,7 +4,7 @@ import type { GradeConfig, UserRole } from '../types';
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 // Application Constants
-export const APP_NAME = 'SchoolHub';
+export const APP_NAME = 'Armburu Model School';
 export const APP_DESCRIPTION = 'School Result Management System';
 
 // Grade Configuration
@@ -147,7 +147,7 @@ export const SESSIONS = ['2021/2022', '2022/2023', '2023/2024', '2024/2025'];
 
 // App Configuration
 export const APP_CONFIG = {
-  schoolName: 'Excellence Secondary School',
+  schoolName: 'Armburu Model School',
   schoolMotto: 'Knowledge is Power',
   address: 'Lagos, Nigeria',
 };

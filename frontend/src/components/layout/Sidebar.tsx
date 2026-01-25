@@ -74,7 +74,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, isMobileOpen, onMobileClose }
       <div className="flex items-center gap-3 px-4 py-6 border-b border-secondary-200">
         <img 
           src="/icons/logo.png" 
-          alt="SchoolHub Logo" 
+          alt="Armburu Model School Logo" 
           className="h-10 w-10 rounded-xl object-contain"
         />
         {isOpen && (

@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icons/logo.png'],
       manifest: {
-        name: 'SchoolHub - Result Management System',
-        short_name: 'SchoolHub',
+        name: 'Armburu Model School - Result Management System',
+        short_name: 'Armburu Model School',
         description: 'Comprehensive school result management system for managing student results, attendance, and academic records',
         theme_color: '#3b82f6',
         background_color: '#ffffff',

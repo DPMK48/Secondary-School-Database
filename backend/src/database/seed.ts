@@ -1,7 +1,7 @@
-import { DataSource } from 'typeorm';
+import { DataSource, DataSourceOptions } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { config } from 'dotenv';
-import { typeOrmConfig } from '../config/typeorm.config';
+import * as path from 'path';
 import { Role } from '../entities/role.entity';
 import { User } from '../entities/user.entity';
 import { ROLES } from '../utils/constants';
@@ -10,8 +10,34 @@ import { ROLES } from '../utils/constants';
 config();
 
 async function seed() {
-  const dataSource = new DataSource(typeOrmConfig as any);
+  // Create a custom config for seeding with synchronize enabled
+  const databaseUrl = process.env.DATABASE_URL;
+  
+  const seedConfig: DataSourceOptions = databaseUrl
+    ? {
+        type: 'postgres',
+        url: databaseUrl,
+        entities: [path.join(__dirname, '..', '**', '*.entity{.ts,.js}')],
+        synchronize: true, // Enable to create tables
+        logging: true,
+        ssl: { rejectUnauthorized: false },
+      }
+    : {
+        type: 'postgres',
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT, 10) || 5432,
+        username: process.env.DB_USERNAME || 'postgres',
+        password: process.env.DB_PASSWORD || 'postgres',
+        database: process.env.DB_DATABASE || 'school_db',
+        entities: [path.join(__dirname, '..', '**', '*.entity{.ts,.js}')],
+        synchronize: true, // Enable to create tables
+        logging: true,
+      };
+
+  const dataSource = new DataSource(seedConfig);
   await dataSource.initialize();
+  
+  console.log('📦 Database tables synchronized!');
 
   console.log('🌱 Starting database seeding...');
 
