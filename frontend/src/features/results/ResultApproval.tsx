@@ -1,5 +1,4 @@
-import React, { useState, useMemo } from 'react';
-import { useRole } from '../../hooks/useRole';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Button,
   Select,
@@ -9,9 +8,9 @@ import {
   CardContent,
   Table,
   Badge,
-  Modal,
   Alert,
   Input,
+  Spinner,
 } from '../../components/common';
 import {
   mockStudents,
@@ -21,419 +20,394 @@ import {
   generateMockResultsForClassSubject,
 } from '../../utils/mockData';
 import { getFullName, calculateGrade, getGradeVariant, cn } from '../../utils/helpers';
-import { CURRENT_SESSION, CURRENT_TERM, SESSIONS, TERMS } from '../../utils/constants';
+import { useCurrentSession, useCurrentTerm, useSessions, useTerms } from '../../hooks/useSessionTerm';
 import {
   CheckCircle,
-  XCircle,
-  AlertCircle,
-  ClipboardCheck,
   Search,
   Eye,
-  MessageSquare,
+  Edit2,
+  FileSignature,
+  Save,
+  Send,
 } from 'lucide-react';
 
-type ApprovalStatus = 'pending' | 'approved' | 'rejected';
-
-interface ResultForApproval {
-  id: number;
+interface CompiledStudentResult {
   student_id: number;
   student_name: string;
-  admission_number: string;
-  subject_id: number;
-  subject_name: string;
-  ca1_score: number;
-  ca2_score: number;
-  exam_score: number;
+  admission_no: string;
+  class_id: number;
+  class_name: string;
+  average_score: number;
+  position: number;
+  overall_grade: string;
+  form_teacher_remark: string;
   total_score: number;
-  grade: string;
-  status: ApprovalStatus;
-  remarks?: string;
+  number_of_subjects: number;
+  status: 'pending' | 'approved';
 }
 
 const ResultApproval: React.FC = () => {
-  const { canApproveResults } = useRole();
-
-  const [selectedClass, setSelectedClass] = useState('');
-  const [selectedSubject, setSelectedSubject] = useState('');
-  const [selectedSession, setSelectedSession] = useState(CURRENT_SESSION);
-  const [selectedTerm, setSelectedTerm] = useState(CURRENT_TERM);
-  const [statusFilter, setStatusFilter] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
+  // Fetch session and term data from backend
+  const { data: currentSession } = useCurrentSession();
+  const { data: currentTerm } = useCurrentTerm();
+  const { data: sessionsResponse } = useSessions();
+  const { data: termsResponse } = useTerms();
   
-  const [showApproveModal, setShowApproveModal] = useState(false);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [selectedResult, setSelectedResult] = useState<ResultForApproval | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
-  const [selectedResults, setSelectedResults] = useState<number[]>([]);
+  const [selectedSession, setSelectedSession] = useState('');
+  const [selectedTerm, setSelectedTerm] = useState('');
+  
+  // Set initial values when data loads
+  useEffect(() => {
+    if (currentSession && !selectedSession) {
+      setSelectedSession(currentSession.id?.toString() || '');
+    }
+  }, [currentSession, selectedSession]);
 
-  // Options
-  const classOptions = mockClasses.map((c) => ({ value: c.id.toString(), label: getClassDisplayName(c) }));
-  const subjectOptions = mockSubjects.map((s) => ({ value: s.id.toString(), label: s.subject_name }));
-  const sessionOptions = SESSIONS.map((s) => ({ value: s, label: s }));
-  const termOptions = TERMS.map((t) => ({ value: t.id.toString(), label: t.name }));
+  useEffect(() => {
+    if (currentTerm && !selectedTerm) {
+      setSelectedTerm(currentTerm.id?.toString() || '');
+    }
+  }, [currentTerm, selectedTerm]);
+  const [selectedClass, setSelectedClass] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [principalRemarks, setPrincipalRemarks] = useState<Record<number, string>>({});
+  const [signature, setSignature] = useState('');
+  const [editingRemarkId, setEditingRemarkId] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Get results for approval
-  const resultsForApproval = useMemo(() => {
-    if (!selectedClass || !selectedSubject) return [];
+  // Get compiled results from all form teachers
+  const compiledResults = useMemo((): CompiledStudentResult[] => {
+    if (!selectedClass) return [];
     
-    const subjectId = parseInt(selectedSubject);
-    const subject = mockSubjects.find((s) => s.id === subjectId);
-    
-    // Get results for this class and subject
-    const results = generateMockResultsForClassSubject(parseInt(selectedClass), subjectId);
-    
-    // Group results by student
-    const studentResults = new Map<number, { ca1: number; ca2: number; exam: number; id: number }>();
-    
-    results.forEach((result) => {
-      if (!studentResults.has(result.student_id)) {
-        studentResults.set(result.student_id, { ca1: 0, ca2: 0, exam: 0, id: result.id });
-      }
-      const scores = studentResults.get(result.student_id)!;
-      if (result.assessment_id === 1) scores.ca1 = result.score;
-      if (result.assessment_id === 2) scores.ca2 = result.score;
-      if (result.assessment_id === 4) scores.exam = result.score;
-    });
-    
-    return Array.from(studentResults.entries()).map(([studentId, scores]) => {
-      const student = mockStudents.find((s) => s.id === studentId);
-      const totalScore = scores.ca1 + scores.ca2 + scores.exam;
-      const grade = calculateGrade(totalScore).grade;
-      
-      // Assign approval status for demo (deterministic based on id)
-      const statuses: ApprovalStatus[] = ['pending', 'approved', 'pending', 'pending'];
-      const status = statuses[scores.id % statuses.length];
-      
+    const classId = parseInt(selectedClass);
+    const classStudents = mockStudents.filter(
+      (s) => s.current_class_id === classId && s.status === 'Active'
+    );
+    const classSubjects = mockSubjects.filter((s) => s.level === mockClasses.find(c => c.id === classId)?.level);
+
+    return classStudents.map((student, index) => {
+      const subjectScores = classSubjects.map((subject) => {
+        const results = generateMockResultsForClassSubject(classId, subject.id).filter(
+          (r) => r.student_id === student.id
+        );
+        const test1 = results.find((r) => r.assessment_id === 1)?.score || 0;
+        const test2 = results.find((r) => r.assessment_id === 2)?.score || 0;
+        const test3 = results.find((r) => r.assessment_id === 3)?.score || 0;
+        const exam = results.find((r) => r.assessment_id === 4)?.score || 0;
+        return test1 + test2 + test3 + exam;
+      });
+
+      const totalScore = subjectScores.reduce((sum, score) => sum + score, 0);
+      const averageScore = subjectScores.length > 0 ? totalScore / subjectScores.length : 0;
+      const overallGrade = calculateGrade(averageScore).grade;
+
+      // Mock form teacher remarks
+      const remarks = [
+        'Excellent performance. Keep it up!',
+        'Good work. Needs improvement in some areas.',
+        'Satisfactory progress this term.',
+        'Must work harder next term.',
+      ];
+
       return {
-        id: scores.id,
-        student_id: studentId,
-        student_name: student ? getFullName(student.first_name, student.last_name) : 'Unknown',
-        admission_number: student?.admission_no || '',
-        subject_id: subjectId,
-        subject_name: subject?.subject_name || '',
-        ca1_score: scores.ca1,
-        ca2_score: scores.ca2,
-        exam_score: scores.exam,
+        student_id: student.id,
+        student_name: getFullName(student.first_name, student.last_name),
+        admission_no: student.admission_no,
+        class_id: classId,
+        class_name: getClassDisplayName(mockClasses.find(c => c.id === classId)!),
+        average_score: averageScore,
+        position: index + 1,
+        overall_grade: overallGrade,
+        form_teacher_remark: remarks[index % remarks.length],
         total_score: totalScore,
-        grade,
-        status,
+        number_of_subjects: classSubjects.length,
+        status: index % 3 === 0 ? 'approved' : 'pending',
       };
-    });
-  }, [selectedClass, selectedSubject, selectedSession, selectedTerm]);
+    }).sort((a, b) => b.average_score - a.average_score)
+      .map((result, index) => ({ ...result, position: index + 1 }));
+  }, [selectedClass]);
 
   // Filter results
   const filteredResults = useMemo(() => {
-    return resultsForApproval.filter((result) => {
-      const matchesSearch =
-        !searchQuery ||
-        result.student_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        result.admission_number.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus = !statusFilter || result.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [resultsForApproval, searchQuery, statusFilter]);
+    return compiledResults.filter((result) => 
+      !searchQuery ||
+      result.student_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      result.admission_no.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [compiledResults, searchQuery]);
 
-  // Statistics
-  const stats = useMemo(() => {
-    return {
-      total: resultsForApproval.length,
-      pending: resultsForApproval.filter((r) => r.status === 'pending').length,
-      approved: resultsForApproval.filter((r) => r.status === 'approved').length,
-      rejected: resultsForApproval.filter((r) => r.status === 'rejected').length,
-    };
-  }, [resultsForApproval]);
-
-  const handleApprove = (result: ResultForApproval) => {
-    setSelectedResult(result);
-    setShowApproveModal(true);
+  const handlePrincipalRemarkChange = (studentId: number, value: string) => {
+    setPrincipalRemarks((prev) => ({
+      ...prev,
+      [studentId]: value,
+    }));
   };
 
-  const handleReject = (result: ResultForApproval) => {
-    setSelectedResult(result);
-    setShowRejectModal(true);
-  };
+  const handleApproveAndPublish = async () => {
+    setIsSaving(true);
+    setSuccessMessage(null);
 
-  const confirmApprove = () => {
-    console.log('Approving result:', selectedResult?.id);
-    setShowApproveModal(false);
-    setSelectedResult(null);
-  };
+    try {
+      // Check if all students have principal remarks
+      const studentsWithoutRemarks = filteredResults.filter(
+        (student) => student.status === 'pending' && (!principalRemarks[student.student_id] || principalRemarks[student.student_id].trim() === '')
+      );
 
-  const confirmReject = () => {
-    console.log('Rejecting result:', selectedResult?.id, 'Reason:', rejectReason);
-    setShowRejectModal(false);
-    setSelectedResult(null);
-    setRejectReason('');
-  };
+      if (studentsWithoutRemarks.length > 0) {
+        alert(`Please add principal remarks for all pending students. ${studentsWithoutRemarks.length} student(s) still need remarks.`);
+        setIsSaving(false);
+        return;
+      }
 
-  const handleBulkApprove = () => {
-    console.log('Bulk approving results:', selectedResults);
-    setSelectedResults([]);
-  };
+      if (!signature.trim()) {
+        alert('Please add principal signature before approving.');
+        setIsSaving(false);
+        return;
+      }
 
-  const toggleSelectResult = (id: number) => {
-    if (selectedResults.includes(id)) {
-      setSelectedResults(selectedResults.filter((r) => r !== id));
-    } else {
-      setSelectedResults([...selectedResults, id]);
+      // Prepare data for backend
+      const approvalData = filteredResults
+        .filter(r => r.status === 'pending')
+        .map((student) => ({
+          student_id: student.student_id,
+          class_id: student.class_id,
+          session: selectedSession,
+          term_id: parseInt(selectedTerm),
+          average_score: student.average_score,
+          position: student.position,
+          overall_grade: student.overall_grade,
+          form_teacher_remark: student.form_teacher_remark,
+          principal_remark: principalRemarks[student.student_id],
+          principal_signature: signature,
+          status: 'approved',
+          approved_at: new Date().toISOString(),
+        }));
+
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // TODO: Uncomment when backend API is ready
+      // await resultsApi.approveResults(approvalData);
+
+      setSuccessMessage(
+        `Successfully approved and published results for ${approvalData.length} students. Results are now available in the Reports section.`
+      );
+
+      // Clear form
+      setPrincipalRemarks({});
+      setSignature('');
+    } catch (error) {
+      alert('Failed to approve results. Please try again.');
+      console.error('Error approving results:', error);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const toggleSelectAll = () => {
-    const pendingIds = filteredResults.filter((r) => r.status === 'pending').map((r) => r.id);
-    if (selectedResults.length === pendingIds.length) {
-      setSelectedResults([]);
-    } else {
-      setSelectedResults(pendingIds);
-    }
-  };
+  const allRemarksComplete = useMemo(() => {
+    const pendingStudents = filteredResults.filter(r => r.status === 'pending');
+    return pendingStudents.every(
+      (student) => principalRemarks[student.student_id] && principalRemarks[student.student_id].trim() !== ''
+    ) && signature.trim() !== '';
+  }, [filteredResults, principalRemarks, signature]);
 
-  const statusOptions = [
-    { value: 'pending', label: 'Pending' },
-    { value: 'approved', label: 'Approved' },
-    { value: 'rejected', label: 'Rejected' },
-  ];
+  const getPositionSuffix = (pos: number) => {
+    if (pos === 11 || pos === 12 || pos === 13) return 'th';
+    const lastDigit = pos % 10;
+    if (lastDigit === 1) return 'st';
+    if (lastDigit === 2) return 'nd';
+    if (lastDigit === 3) return 'rd';
+    return 'th';
+  };
 
   const columns = [
     {
-      key: 'select',
-      label: (
-        <input
-          type="checkbox"
-          checked={
-            selectedResults.length > 0 &&
-            selectedResults.length ===
-              filteredResults.filter((r) => r.status === 'pending').length
-          }
-          onChange={toggleSelectAll}
-          className="rounded border-secondary-300 text-primary-600 focus:ring-primary-500"
-        />
+      key: 'position',
+      label: 'Position',
+      render: (_value: unknown, row: CompiledStudentResult) => (
+        <span className={cn(
+          'font-bold text-lg',
+          row.position === 1 && 'text-yellow-500',
+          row.position === 2 && 'text-gray-400',
+          row.position === 3 && 'text-amber-600'
+        )}>
+          {row.position}{getPositionSuffix(row.position)}
+        </span>
       ),
-      render: (_value: unknown, row: ResultForApproval) =>
-        row.status === 'pending' ? (
-          <input
-            type="checkbox"
-            checked={selectedResults.includes(row.id)}
-            onChange={() => toggleSelectResult(row.id)}
-            className="rounded border-secondary-300 text-primary-600 focus:ring-primary-500"
-          />
-        ) : null,
     },
     {
       key: 'student',
       label: 'Student',
-      render: (_value: unknown, row: ResultForApproval) => (
+      render: (_value: unknown, row: CompiledStudentResult) => (
         <div>
-          <p className="font-medium text-secondary-900">{row.student_name}</p>
-          <p className="text-xs text-secondary-500">{row.admission_number}</p>
+          <div className="font-medium text-secondary-900">{row.student_name}</div>
+          <div className="text-sm text-secondary-500">{row.admission_no}</div>
         </div>
       ),
     },
     {
-      key: 'ca1',
-      label: 'CA1 (20)',
-      render: (_value: unknown, row: ResultForApproval) => (
-        <span className={cn(row.ca1_score < 8 && 'text-danger-500')}>{row.ca1_score}</span>
-      ),
-    },
-    {
-      key: 'ca2',
-      label: 'CA2 (20)',
-      render: (_value: unknown, row: ResultForApproval) => (
-        <span className={cn(row.ca2_score < 8 && 'text-danger-500')}>{row.ca2_score}</span>
-      ),
-    },
-    {
-      key: 'exam',
-      label: 'Exam (60)',
-      render: (_value: unknown, row: ResultForApproval) => (
-        <span className={cn(row.exam_score < 24 && 'text-danger-500')}>{row.exam_score}</span>
-      ),
-    },
-    {
-      key: 'total',
-      label: 'Total',
-      render: (_value: unknown, row: ResultForApproval) => (
-        <span className="font-semibold">{row.total_score}</span>
+      key: 'average',
+      label: 'Average',
+      render: (_value: unknown, row: CompiledStudentResult) => (
+        <div className="text-center font-bold text-lg text-primary-600">
+          {row.average_score.toFixed(2)}%
+        </div>
       ),
     },
     {
       key: 'grade',
       label: 'Grade',
-      render: (_value: unknown, row: ResultForApproval) => (
-        <Badge variant={getGradeVariant(row.grade)} size="sm">
-          {row.grade}
+      render: (_value: unknown, row: CompiledStudentResult) => (
+        <Badge variant={getGradeVariant(row.overall_grade)} className="text-lg px-3 py-1">
+          {row.overall_grade}
         </Badge>
       ),
+    },
+    {
+      key: 'form_teacher_remark',
+      label: 'Form Teacher Remark',
+      render: (_value: unknown, row: CompiledStudentResult) => (
+        <div className="text-sm text-secondary-700 max-w-xs">{row.form_teacher_remark}</div>
+      ),
+    },
+    {
+      key: 'principal_remark',
+      label: 'Principal Remark',
+      render: (_value: unknown, row: CompiledStudentResult) => {
+        const isEditing = editingRemarkId === row.student_id;
+        const hasRemark = principalRemarks[row.student_id]?.trim();
+
+        if (row.status === 'approved') {
+          return <span className="text-sm text-secondary-700">{principalRemarks[row.student_id] || 'Approved'}</span>;
+        }
+
+        return (
+          <div className="min-w-[250px]">
+            {isEditing ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="text"
+                  value={principalRemarks[row.student_id] || ''}
+                  onChange={(e) => handlePrincipalRemarkChange(row.student_id, e.target.value)}
+                  placeholder="Enter principal remark..."
+                  className="text-sm"
+                  autoFocus
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditingRemarkId(null)}
+                >
+                  ✓
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "text-sm flex-1",
+                  hasRemark ? "text-secondary-900" : "text-secondary-400 italic"
+                )}>
+                  {hasRemark || "Click to add remark"}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditingRemarkId(row.student_id)}
+                >
+                  <Edit2 className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'status',
       label: 'Status',
-      render: (_value: unknown, row: ResultForApproval) => (
-        <Badge
-          variant={
-            row.status === 'approved' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'
-          }
-          size="sm"
-        >
-          {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
+      render: (_value: unknown, row: CompiledStudentResult) => (
+        <Badge variant={row.status === 'approved' ? 'success' : 'warning'}>
+          {row.status === 'approved' ? 'Approved' : 'Pending'}
         </Badge>
       ),
-    },
-    {
-      key: 'actions',
-      label: 'Actions',
-      render: (_value: unknown, row: ResultForApproval) =>
-        row.status === 'pending' && canApproveResults ? (
-          <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleApprove(row)}
-              className="text-success-600 hover:bg-success-50"
-            >
-              <CheckCircle className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleReject(row)}
-              className="text-danger-600 hover:bg-danger-50"
-            >
-              <XCircle className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : (
-          <Button variant="ghost" size="sm">
-            <Eye className="h-4 w-4" />
-          </Button>
-        ),
     },
   ];
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-secondary-900">Result Approval</h1>
-          <p className="text-secondary-500 mt-1">Review and approve student results</p>
-        </div>
-        {selectedResults.length > 0 && (
-          <Button leftIcon={<CheckCircle className="h-4 w-4" />} onClick={handleBulkApprove}>
-            Approve Selected ({selectedResults.length})
-          </Button>
-        )}
+      <div>
+        <h1 className="text-2xl font-bold text-secondary-900">Result Approval</h1>
+        <p className="text-secondary-500 mt-1">
+          Review compiled results from form teachers, add principal remarks and signature, then approve for publication
+        </p>
       </div>
 
       {/* Filters */}
       <Card>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Select
-              label="Class"
-              options={classOptions}
-              value={selectedClass}
-              onChange={setSelectedClass}
-              placeholder="Select class"
-            />
-            <Select
-              label="Subject"
-              options={subjectOptions}
-              value={selectedSubject}
-              onChange={setSelectedSubject}
-              placeholder="Select subject"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Select
               label="Session"
-              options={sessionOptions}
+              options={[
+                { value: '', label: 'Select session...' },
+                ...(sessionsResponse?.data || []).map((s: any) => ({ 
+                  value: s.id.toString(), 
+                  label: s.sessionName 
+                }))
+              ]}
               value={selectedSession}
               onChange={setSelectedSession}
             />
             <Select
               label="Term"
-              options={termOptions}
+              options={[
+                { value: '', label: 'Select term...' },
+                ...(termsResponse?.data || []).map((t: any) => ({ 
+                  value: t.id.toString(), 
+                  label: t.termName 
+                }))
+              ]}
               value={selectedTerm}
               onChange={setSelectedTerm}
+            />
+            <Select
+              label="Class"
+              options={[
+                { value: '', label: 'Select class...' },
+                ...mockClasses.map((c) => ({ value: c.id.toString(), label: getClassDisplayName(c) })),
+              ]}
+              value={selectedClass}
+              onChange={setSelectedClass}
             />
           </div>
         </CardContent>
       </Card>
 
-      {/* Statistics */}
-      {selectedClass && selectedSubject && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card padding="sm">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-secondary-100 flex items-center justify-center">
-                <ClipboardCheck className="h-5 w-5 text-secondary-600" />
-              </div>
-              <div>
-                <p className="text-xs text-secondary-500">Total Results</p>
-                <p className="text-xl font-bold text-secondary-900">{stats.total}</p>
-              </div>
-            </div>
-          </Card>
-          <Card padding="sm">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-warning-100 flex items-center justify-center">
-                <AlertCircle className="h-5 w-5 text-warning-600" />
-              </div>
-              <div>
-                <p className="text-xs text-secondary-500">Pending</p>
-                <p className="text-xl font-bold text-warning-600">{stats.pending}</p>
-              </div>
-            </div>
-          </Card>
-          <Card padding="sm">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-success-100 flex items-center justify-center">
-                <CheckCircle className="h-5 w-5 text-success-600" />
-              </div>
-              <div>
-                <p className="text-xs text-secondary-500">Approved</p>
-                <p className="text-xl font-bold text-success-600">{stats.approved}</p>
-              </div>
-            </div>
-          </Card>
-          <Card padding="sm">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-danger-100 flex items-center justify-center">
-                <XCircle className="h-5 w-5 text-danger-600" />
-              </div>
-              <div>
-                <p className="text-xs text-secondary-500">Rejected</p>
-                <p className="text-xl font-bold text-danger-600">{stats.rejected}</p>
-              </div>
-            </div>
-          </Card>
-        </div>
+      {successMessage && (
+        <Alert variant="success">
+          {successMessage}
+        </Alert>
       )}
 
       {/* Results Table */}
-      {selectedClass && selectedSubject && (
+      {selectedClass && (
         <Card>
           <CardHeader>
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center justify-between">
               <CardTitle>
-                {mockSubjects.find((s) => s.id === parseInt(selectedSubject))?.subject_name} Results -{' '} 
-                {mockClasses.find((c) => c.id === parseInt(selectedClass))
-                  ? getClassDisplayName(mockClasses.find((c) => c.id === parseInt(selectedClass))!)
+                Compiled Results - {mockClasses.find(c => c.id === parseInt(selectedClass))
+                  ? getClassDisplayName(mockClasses.find(c => c.id === parseInt(selectedClass))!)
                   : ''}
               </CardTitle>
               <div className="flex gap-2">
                 <Input
-                  placeholder="Search..."
+                  placeholder="Search students..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  leftIcon={<Search className="h-5 w-5" />}
-                  className="w-48"
-                />
-                <Select
-                  options={statusOptions}
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  placeholder="All Status"
+                  leftIcon={<Search className="h-4 w-4" />}
+                  className="w-64"
                 />
               </div>
             </div>
@@ -442,87 +416,52 @@ const ResultApproval: React.FC = () => {
             <Table
               columns={columns}
               data={filteredResults}
-              keyExtractor={(item) => item.id.toString()}
-              emptyMessage="No results found"
+              keyExtractor={(item) => item.student_id.toString()}
             />
+
+            {/* Principal Signature */}
+            <div className="mt-6 p-4 bg-secondary-50 rounded-lg">
+              <div className="flex items-center gap-3 mb-3">
+                <FileSignature className="h-5 w-5 text-secondary-600" />
+                <h3 className="font-semibold text-secondary-900">Principal Signature</h3>
+              </div>
+              <Input
+                type="text"
+                value={signature}
+                onChange={(e) => setSignature(e.target.value)}
+                placeholder="Enter principal name/signature..."
+                className="max-w-md"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                onClick={handleApproveAndPublish}
+                disabled={!allRemarksComplete || isSaving}
+                leftIcon={isSaving ? <Spinner size="sm" /> : <Send className="h-4 w-4" />}
+              >
+                {isSaving ? 'Approving...' : 'Approve & Publish to Reports'}
+              </Button>
+            </div>
+            
+            {!allRemarksComplete && filteredResults.some(r => r.status === 'pending') && (
+              <p className="text-sm text-orange-600 mt-2 text-right">
+                Please add principal remarks for all pending students and signature before approving
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
 
-      {!selectedClass || !selectedSubject ? (
+      {!selectedClass && (
         <Card>
           <div className="text-center py-12">
-            <ClipboardCheck className="h-12 w-12 text-secondary-300 mx-auto mb-4" />
-            <p className="text-secondary-500">Select a class and subject to view results for approval</p>
+            <CheckCircle className="h-12 w-12 text-secondary-300 mx-auto mb-4" />
+            <p className="text-secondary-500">Select a class to view compiled results for approval</p>
           </div>
         </Card>
-      ) : null}
-
-      {/* Approve Modal */}
-      <Modal
-        isOpen={showApproveModal}
-        onClose={() => setShowApproveModal(false)}
-        title="Approve Result"
-        size="sm"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setShowApproveModal(false)}>
-              Cancel
-            </Button>
-            <Button onClick={confirmApprove}>Approve</Button>
-          </>
-        }
-      >
-        <Alert variant="info">
-          Are you sure you want to approve the result for{' '}
-          <strong>{selectedResult?.student_name}</strong> in{' '}
-          <strong>{selectedResult?.subject_name}</strong>?
-        </Alert>
-        <div className="mt-4 p-4 bg-secondary-50 rounded-lg">
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <span className="text-secondary-500">CA1:</span>
-            <span className="font-medium">{selectedResult?.ca1_score}/20</span>
-            <span className="text-secondary-500">CA2:</span>
-            <span className="font-medium">{selectedResult?.ca2_score}/20</span>
-            <span className="text-secondary-500">Exam:</span>
-            <span className="font-medium">{selectedResult?.exam_score}/60</span>
-            <span className="text-secondary-500">Total:</span>
-            <span className="font-bold">{selectedResult?.total_score}/100</span>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Reject Modal */}
-      <Modal
-        isOpen={showRejectModal}
-        onClose={() => setShowRejectModal(false)}
-        title="Reject Result"
-        size="md"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setShowRejectModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="danger" onClick={confirmReject}>
-              Reject
-            </Button>
-          </>
-        }
-      >
-        <Alert variant="warning" className="mb-4">
-          You are about to reject the result for <strong>{selectedResult?.student_name}</strong> in{' '}
-          <strong>{selectedResult?.subject_name}</strong>. Please provide a reason.
-        </Alert>
-        <div className="space-y-4">
-          <Input
-            label="Reason for Rejection"
-            placeholder="Enter reason..."
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            leftIcon={<MessageSquare className="h-5 w-5" />}
-          />
-        </div>
-      </Modal>
+      )}
     </div>
   );
 };

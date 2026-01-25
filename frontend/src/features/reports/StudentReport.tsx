@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Button,
   Select,
@@ -6,75 +6,135 @@ import {
   CardContent,
   Badge,
   Alert,
+  Spinner,
 } from '../../components/common';
-import {
-  mockStudents,
-  mockClasses,
-  mockSubjects,
-  generateStudentResultSummary,
-  getClassDisplayName,
-  mockFormTeachers,
-  mockTeachers,
-} from '../../utils/mockData';
 import { getFullName, formatDate, calculateGrade, getGradeVariant } from '../../utils/helpers';
-import { CURRENT_SESSION, CURRENT_TERM, SESSIONS, TERMS, GRADE_CONFIG, APP_CONFIG } from '../../utils/constants';
+import { GRADE_CONFIG, APP_CONFIG } from '../../utils/constants';
 import { Download, Printer, User, BookOpen, Calendar, School, Star, CheckCircle2 } from 'lucide-react';
+import { useRole } from '../../hooks/useRole';
+import { useCurrentSession, useCurrentTerm, useSessions, useTerms } from '../../hooks/useSessionTerm';
+import { useStudentsQuery } from '../../hooks/useStudents';
+import { useClassesQuery, useClassQuery } from '../../hooks/useClasses';
+import { useStudentReportQuery } from '../../hooks/useReports';
+import type { Student, Class } from '../../types';
+
+// Helper to get class display name
+const getClassDisplayName = (classItem: Class | { className?: string; class_name?: string; arm?: string }) => {
+  const name = classItem.className || (classItem as any).class_name || '';
+  const arm = classItem.arm || '';
+  return `${name} ${arm}`.trim();
+};
 
 const StudentReport: React.FC = () => {
+  const { isAdmin } = useRole();
   const [selectedStudent, setSelectedStudent] = useState('');
-  const [selectedSession, setSelectedSession] = useState(CURRENT_SESSION);
-  const [selectedTerm, setSelectedTerm] = useState(CURRENT_TERM);
+  
+  // Fetch session and term data from backend
+  const { data: currentSession } = useCurrentSession();
+  const { data: currentTerm } = useCurrentTerm();
+  const { data: sessionsResponse } = useSessions();
+  const { data: termsResponse } = useTerms();
+  
+  const [selectedSession, setSelectedSession] = useState('');
+  const [selectedTerm, setSelectedTerm] = useState('');
   const reportRef = useRef<HTMLDivElement>(null);
 
+  // Set initial values when data loads
+  useEffect(() => {
+    if (currentSession && !selectedSession) {
+      setSelectedSession(currentSession.id?.toString() || '');
+    }
+  }, [currentSession, selectedSession]);
+
+  useEffect(() => {
+    if (currentTerm && !selectedTerm) {
+      setSelectedTerm(currentTerm.id?.toString() || '');
+    }
+  }, [currentTerm, selectedTerm]);
+
+  // Fetch students from API
+  const { data: studentsData, isLoading: isLoadingStudents } = useStudentsQuery();
+  const students = useMemo(() => {
+    if (!studentsData) return [];
+    return Array.isArray(studentsData) ? studentsData : studentsData.data || [];
+  }, [studentsData]);
+
+  // Fetch student report from API
+  const { data: reportData, isLoading: isLoadingReport } = useStudentReportQuery(
+    {
+      student_id: parseInt(selectedStudent) || 0,
+      term_id: parseInt(selectedTerm) || undefined,
+      session_id: parseInt(selectedSession) || undefined,
+    },
+    { enabled: !!selectedStudent && !!selectedTerm && !!selectedSession }
+  );
+
   // Options
-  const sessionOptions = SESSIONS.map((s) => ({ value: s, label: s }));
-  const termOptions = TERMS.map((t) => ({ value: t.id.toString(), label: t.name }));
+  const sessionOptions = useMemo(() => {
+    if (!sessionsResponse?.data) return [];
+    return sessionsResponse.data.map((s: any) => ({ 
+      value: s.id.toString(), 
+      label: s.sessionName 
+    }));
+  }, [sessionsResponse]);
+  
+  const termOptions = useMemo(() => {
+    if (!termsResponse?.data) return [];
+    return termsResponse.data.map((t: any) => ({ 
+      value: t.id.toString(), 
+      label: t.termName 
+    }));
+  }, [termsResponse]);
 
   // Get student details
   const student = useMemo(() => {
     if (!selectedStudent) return null;
-    return mockStudents.find((s) => s.id === parseInt(selectedStudent));
-  }, [selectedStudent]);
+    return students.find((s: Student) => s.id === parseInt(selectedStudent));
+  }, [selectedStudent, students]);
 
-  // Get class details
+  // Get class details from report data or student
   const studentClass = useMemo(() => {
+    if (reportData?.class) return reportData.class;
     if (!student) return null;
-    return mockClasses.find((c) => c.id === student.current_class_id);
-  }, [student]);
+    const classId = student.currentClassId || student.current_class_id;
+    return { id: classId } as Class;
+  }, [student, reportData]);
 
-  // Get form teacher
+  // Get form teacher from report
   const formTeacher = useMemo(() => {
-    if (!studentClass) return null;
-    const ft = mockFormTeachers.find((f) => f.class_id === studentClass.id);
-    if (!ft) return null;
-    return mockTeachers.find((t) => t.id === ft.teacher_id);
-  }, [studentClass]);
+    return reportData?.formTeacher || null;
+  }, [reportData]);
 
-  // Generate result summary
+  // Generate result summary from report data
   const resultSummary = useMemo(() => {
-    if (!student || !studentClass) return null;
-    return generateStudentResultSummary(student.id, studentClass.id);
-  }, [student, studentClass]);
+    if (!reportData) return null;
+    return {
+      total_score: reportData.totalScore || reportData.total_score || 0,
+      average: reportData.average || reportData.averageScore || 0,
+      position: reportData.position || null,
+      subjects: reportData.subjects || reportData.subjectScores || [],
+    };
+  }, [reportData]);
 
   // Generate detailed results
   const detailedResults = useMemo(() => {
-    if (!resultSummary) return [];
+    if (!resultSummary || !resultSummary.subjects) return [];
     
-    return resultSummary.subjects.map((subject) => ({
-      subject: subject.subject_name,
-      code: mockSubjects.find(s => s.id === subject.subject_id)?.subject_code || '',
-      ca1: subject.test1,
-      ca2: subject.test2,
-      exam: subject.exam,
-      total: subject.total,
-      grade: subject.grade,
-      remark: subject.remark,
+    return resultSummary.subjects.map((subject: any) => ({
+      subject: subject.subject_name || subject.subjectName || '',
+      code: subject.subject_code || subject.subjectCode || '',
+      ca1: subject.test1 || subject.ca1 || 0,
+      ca2: subject.test2 || subject.ca2 || 0,
+      exam: subject.exam || 0,
+      total: subject.total || 0,
+      grade: subject.grade || 'N/A',
+      remark: subject.remark || '',
     }));
   }, [resultSummary]);
 
-  const studentOptions = mockStudents.map((s) => ({
+  const studentOptions = students.map((s: Student) => ({
     value: s.id.toString(),
-    label: `${getFullName(s.first_name, s.last_name)} (${s.admission_no})`,
+    label: `${getFullName(s.firstName || s.first_name, s.lastName || s.last_name)} (${s.admissionNo || s.admission_no})`,
   }));
 
   const handlePrint = () => {
@@ -98,7 +158,7 @@ const StudentReport: React.FC = () => {
           <h1 className="text-2xl font-bold text-secondary-900">Student Report Card</h1>
           <p className="text-secondary-500 mt-1">Generate and print individual student reports</p>
         </div>
-        {selectedStudent && (
+        {selectedStudent && isAdmin && (
           <div className="flex gap-2">
             <Button variant="outline" leftIcon={<Download className="h-4 w-4" />}>
               Download PDF
@@ -142,7 +202,11 @@ const StudentReport: React.FC = () => {
         <Alert variant="info">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5" />
-            <span>This report shows only approved results from the admin dashboard.</span>
+            <span>
+              {isAdmin 
+                ? 'This report shows only approved results.' 
+                : 'You can only view approved student report cards for your class. Printing and downloading require admin permission.'}
+            </span>
           </div>
         </Alert>
       )}
@@ -172,17 +236,17 @@ const StudentReport: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4 text-secondary-400" />
                     <span className="text-sm text-secondary-500">Student Name:</span>
-                    <span className="font-semibold">{getFullName(student.first_name, student.last_name)}</span>
+                    <span className="font-semibold">{getFullName(student.firstName || student.first_name, student.lastName || student.last_name)}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <BookOpen className="h-4 w-4 text-secondary-400" />
                     <span className="text-sm text-secondary-500">Admission No:</span>
-                    <span className="font-semibold">{student.admission_no}</span>
+                    <span className="font-semibold">{student.admissionNo || student.admission_no}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-secondary-400" />
                     <span className="text-sm text-secondary-500">Class:</span>
-                    <span className="font-semibold">{getClassDisplayName(studentClass)}</span>
+                    <span className="font-semibold">{studentClass ? getClassDisplayName(studentClass) : 'N/A'}</span>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -286,7 +350,7 @@ const StudentReport: React.FC = () => {
                       : "Needs to put in more effort next term."}
                   </div>
                   <div className="mt-4 pt-4 border-t border-dashed border-secondary-300">
-                    <p className="text-sm text-secondary-500">Class Teacher: {formTeacher ? getFullName(formTeacher.first_name, formTeacher.last_name) : 'N/A'}</p>
+                    <p className="text-sm text-secondary-500">Class Teacher: {formTeacher ? getFullName(formTeacher.firstName || formTeacher.first_name, formTeacher.lastName || formTeacher.last_name) : 'N/A'}</p>
                     <p className="text-xs text-secondary-400 mt-1">Signature: _____________________</p>
                   </div>
                 </div>

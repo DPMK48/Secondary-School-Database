@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Button,
   Select,
@@ -9,57 +9,115 @@ import {
   Table,
   Badge,
   Alert,
+  Spinner,
 } from '../../components/common';
-import {
-  mockStudents,
-  mockClasses,
-  generateStudentResultSummary,
-  getClassDisplayName,
-  mockFormTeachers,
-  mockTeachers,
-} from '../../utils/mockData';
 import { getFullName, calculateGrade, getGradeVariant, cn } from '../../utils/helpers';
-import { CURRENT_SESSION, CURRENT_TERM, SESSIONS, TERMS, GRADE_CONFIG } from '../../utils/constants';
+import { GRADE_CONFIG } from '../../utils/constants';
 import { Download, Printer, School, Users, TrendingUp, Award, BarChart3, CheckCircle2 } from 'lucide-react';
+import { useCurrentSession, useCurrentTerm, useSessions, useTerms } from '../../hooks/useSessionTerm';
+import { useClassesQuery, useClassStudentsQuery } from '../../hooks/useClasses';
+import { useClassReportQuery } from '../../hooks/useReports';
+import type { Class, Student } from '../../types';
+
+// Helper to get class display name
+const getClassDisplayName = (classItem: Class | { className?: string; class_name?: string; arm?: string }) => {
+  const name = classItem.className || (classItem as any).class_name || '';
+  const arm = classItem.arm || '';
+  return `${name} ${arm}`.trim();
+};
 
 const ClassReport: React.FC = () => {
+  // Fetch session and term data from backend
+  const { data: currentSession } = useCurrentSession();
+  const { data: currentTerm } = useCurrentTerm();
+  const { data: sessionsResponse } = useSessions();
+  const { data: termsResponse } = useTerms();
+  
   const [selectedClass, setSelectedClass] = useState('');
-  const [selectedSession, setSelectedSession] = useState(CURRENT_SESSION);
-  const [selectedTerm, setSelectedTerm] = useState(CURRENT_TERM);
+  const [selectedSession, setSelectedSession] = useState('');
+  const [selectedTerm, setSelectedTerm] = useState('');
+
+  // Set initial values when data loads
+  useEffect(() => {
+    if (currentSession && !selectedSession) {
+      setSelectedSession(currentSession.id?.toString() || '');
+    }
+  }, [currentSession, selectedSession]);
+
+  useEffect(() => {
+    if (currentTerm && !selectedTerm) {
+      setSelectedTerm(currentTerm.id?.toString() || '');
+    }
+  }, [currentTerm, selectedTerm]);
+
+  // Fetch classes from API
+  const { data: classesData, isLoading: isLoadingClasses } = useClassesQuery();
+  const availableClasses = useMemo(() => {
+    if (!classesData) return [];
+    return Array.isArray(classesData) ? classesData : classesData.data || [];
+  }, [classesData]);
+
+  // Fetch students in selected class
+  const { data: studentsData, isLoading: isLoadingStudents } = useClassStudentsQuery(
+    parseInt(selectedClass) || 0,
+    { enabled: !!selectedClass }
+  );
+
+  // Fetch class report from API
+  const { data: reportData, isLoading: isLoadingReport } = useClassReportQuery(
+    {
+      class_id: parseInt(selectedClass) || 0,
+      term_id: parseInt(selectedTerm) || undefined,
+      session_id: parseInt(selectedSession) || undefined,
+    },
+    { enabled: !!selectedClass && !!selectedTerm && !!selectedSession }
+  );
 
   // Get class details
   const currentClass = useMemo(() => {
     if (!selectedClass) return null;
-    return mockClasses.find((c) => c.id === parseInt(selectedClass));
-  }, [selectedClass]);
+    return availableClasses.find((c: Class) => c.id === parseInt(selectedClass));
+  }, [selectedClass, availableClasses]);
 
   // Get students in class
   const classStudents = useMemo(() => {
-    if (!selectedClass) return [];
-    const classId = parseInt(selectedClass);
-    return mockStudents.filter((s) => s.current_class_id === classId);
-  }, [selectedClass]);
+    if (!studentsData) return [];
+    const students = studentsData.data || studentsData || [];
+    return Array.isArray(students) ? students : [];
+  }, [studentsData]);
 
-  // Get form teacher
+  // Get form teacher from report
   const formTeacher = useMemo(() => {
-    if (!currentClass) return null;
-    const ft = mockFormTeachers.find((f) => f.class_id === currentClass.id);
-    if (!ft) return null;
-    return mockTeachers.find((t) => t.id === ft.teacher_id);
-  }, [currentClass]);
+    return reportData?.formTeacher || currentClass?.formTeacher || null;
+  }, [reportData, currentClass]);
 
-  // Generate result summaries for all students
+  // Generate result summaries for all students from report data
   const studentResults = useMemo(() => {
-    if (!currentClass) return [];
-    
-    return classStudents.map((student) => {
-      const summary = generateStudentResultSummary(student.id, currentClass.id);
-      return {
-        ...student,
-        ...summary,
-      };
-    }).sort((a, b) => (b.average || 0) - (a.average || 0));
-  }, [classStudents, currentClass, selectedSession, selectedTerm]);
+    if (reportData?.students) {
+      return reportData.students.map((item: any) => ({
+        id: item.student_id || item.studentId || item.id,
+        firstName: item.firstName || item.first_name || item.student?.firstName || item.student?.first_name,
+        lastName: item.lastName || item.last_name || item.student?.lastName || item.student?.last_name,
+        admissionNo: item.admissionNo || item.admission_no || item.student?.admissionNo || item.student?.admission_no,
+        gender: item.gender || item.student?.gender,
+        average: item.average || item.averageScore || 0,
+        total_score: item.total_score || item.totalScore || 0,
+        subjects_count: item.subjects_count || item.subjectsCount || 0,
+      })).sort((a: any, b: any) => (b.average || 0) - (a.average || 0));
+    }
+
+    // Fallback: Create empty results from students list
+    return classStudents.map((student: Student) => ({
+      id: student.id,
+      firstName: student.firstName || student.first_name,
+      lastName: student.lastName || student.last_name,
+      admissionNo: student.admissionNo || student.admission_no,
+      gender: student.gender,
+      average: 0,
+      total_score: 0,
+      subjects_count: 0,
+    }));
+  }, [reportData, classStudents]);
 
   // Add position
   const rankedResults = useMemo(() => {
@@ -101,13 +159,26 @@ const ClassReport: React.FC = () => {
     return rankedResults.slice(-5).reverse();
   }, [rankedResults]);
 
-  const classOptions = mockClasses.map((c) => ({
+  const classOptions = availableClasses.map((c: Class) => ({
     value: c.id.toString(),
     label: getClassDisplayName(c),
   }));
 
-  const sessionOptions = SESSIONS.map((s) => ({ value: s, label: s }));
-  const termOptions = TERMS.map((t) => ({ value: t.id.toString(), label: t.name }));
+  const sessionOptions = useMemo(() => {
+    if (!sessionsResponse?.data) return [];
+    return sessionsResponse.data.map((s: any) => ({ 
+      value: s.id.toString(), 
+      label: s.sessionName 
+    }));
+  }, [sessionsResponse]);
+  
+  const termOptions = useMemo(() => {
+    if (!termsResponse?.data) return [];
+    return termsResponse.data.map((t: any) => ({ 
+      value: t.id.toString(), 
+      label: t.termName 
+    }));
+  }, [termsResponse]);
 
   const getPositionSuffix = (pos: number) => {
     if (pos === 11 || pos === 12 || pos === 13) return 'th';

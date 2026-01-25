@@ -5,11 +5,10 @@ export interface TeacherFilters {
   status?: string;
   search?: string;
   page?: number;
-  per_page?: number;
+  perPage?: number;
 }
 
 export interface CreateTeacherData {
-  user_id: number;
   first_name: string;
   last_name: string;
   phone: string;
@@ -24,59 +23,75 @@ export interface UpdateTeacherData extends Partial<CreateTeacherData> {
 }
 
 export interface AssignSubjectClassData {
-  teacher_id: number;
-  subject_id: number;
-  class_id: number;
+  teacherId: number;
+  subjectId: number;
+  classId: number;
 }
 
 export const teachersApi = {
   /**
    * Get all teachers with optional filters
    */
-  getAll: (filters?: TeacherFilters) =>
-    api.get<PaginatedResponse<Teacher>>('/teachers', { params: filters }),
+  getAll: async (filters?: TeacherFilters) => {
+    const response = await api.get<any>('/teachers', { params: filters });
+    return response.data;
+  },
 
   /**
    * Get single teacher by ID
    */
-  getById: (id: number) =>
-    api.get<ApiResponse<Teacher>>(`/teachers/${id}`),
+  getById: async (id: number) => {
+    const response = await api.get<any>(`/teachers/${id}`);
+    return response.data;
+  },
 
   /**
    * Create new teacher
    */
-  create: (data: CreateTeacherData) =>
-    api.post<ApiResponse<Teacher>>('/teachers', data),
+  create: async (data: CreateTeacherData) => {
+    const response = await api.post<any>('/teachers', data);
+    return response.data;
+  },
 
   /**
    * Update existing teacher
    */
-  update: (id: number, data: UpdateTeacherData) =>
-    api.put<ApiResponse<Teacher>>(`/teachers/${id}`, data),
+  update: async (id: number, data: UpdateTeacherData) => {
+    const response = await api.patch<any>(`/teachers/${id}`, data);
+    return response.data;
+  },
 
   /**
    * Delete teacher
    */
-  delete: (id: number) =>
-    api.delete<ApiResponse<void>>(`/teachers/${id}`),
+  delete: async (id: number) => {
+    const response = await api.delete<any>(`/teachers/${id}`);
+    return response.data;
+  },
 
   /**
    * Get teacher's assigned subjects
    */
-  getSubjects: (id: number) =>
-    api.get<ApiResponse<TeacherSubjectClass[]>>(`/teachers/${id}/subjects`),
+  getSubjects: async (id: number) => {
+    const response = await api.get<any>(`/teachers/${id}/subjects`);
+    return response.data;
+  },
 
   /**
    * Get teacher's assigned classes
    */
-  getClasses: (id: number) =>
-    api.get<ApiResponse<TeacherSubjectClass[]>>(`/teachers/${id}/classes`),
+  getClasses: async (id: number) => {
+    const response = await api.get<any>(`/teachers/${id}/classes`);
+    return response.data;
+  },
 
   /**
    * Assign subject and class to teacher
    */
-  assignSubjectClass: (data: AssignSubjectClassData) =>
-    api.post<ApiResponse<TeacherSubjectClass>>('/teachers/assign', data),
+  assignSubjectClass: async (data: AssignSubjectClassData) => {
+    const response = await api.post<any>('/teachers/assign', data);
+    return response.data;
+  },
 
   /**
    * Remove subject-class assignment from teacher

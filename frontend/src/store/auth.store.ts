@@ -2,50 +2,17 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, AuthState, LoginCredentials } from '../types';
 import { STORAGE_KEYS } from '../utils/constants';
-import { delay } from '../utils/helpers';
-
-// Mock users for simulation
-const MOCK_USERS: Record<string, { password: string; user: User }> = {
-  admin: {
-    password: 'admin123',
-    user: {
-      id: 1,
-      username: 'admin',
-      email: 'admin@schoolhub.com',
-      role: 'admin',
-      is_active: true,
-      created_at: '2024-01-01',
-    },
-  },
-  formteacher: {
-    password: 'form123',
-    user: {
-      id: 3,
-      username: 'formteacher',
-      email: 'formteacher@schoolhub.com',
-      role: 'form_teacher',
-      is_active: true,
-      created_at: '2024-01-01',
-    },
-  },
-  teacher: {
-    password: 'teacher123',
-    user: {
-      id: 4,
-      username: 'teacher',
-      email: 'teacher@schoolhub.com',
-      role: 'subject_teacher',
-      is_active: true,
-      created_at: '2024-01-01',
-    },
-  },
-};
+import { authApi } from '../features/auth/auth.api';
 
 interface AuthStore extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   setUser: (user: User) => void;
   checkAuth: () => boolean;
+  impersonate: (user: User) => void;
+  exitImpersonation: () => void;
+  originalUser: User | null;
+  isImpersonating: boolean;
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -55,37 +22,48 @@ export const useAuthStore = create<AuthStore>()(
       token: null,
       isAuthenticated: false,
       isLoading: false,
+      originalUser: null,
+      isImpersonating: false,
 
       login: async (credentials: LoginCredentials) => {
         set({ isLoading: true });
         
-        // Simulate API call
-        await delay(1000);
-        
-        const mockUser = MOCK_USERS[credentials.username];
-        
-        if (mockUser && mockUser.password === credentials.password) {
-          const token = `mock_token_${Date.now()}`;
+        try {
+          const response = await authApi.login(credentials);
+          
+          // Store token and user info
+          localStorage.setItem(STORAGE_KEYS.TOKEN, response.access_token);
+          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(response.user));
+          
           set({
-            user: mockUser.user,
-            token,
+            user: response.user,
+            token: response.access_token,
             isAuthenticated: true,
             isLoading: false,
           });
-        } else {
+        } catch (error: any) {
           set({ isLoading: false });
-          throw new Error('Invalid username or password');
+          throw new Error(error?.response?.data?.message || 'Invalid username or password');
         }
       },
 
-      logout: () => {
-        localStorage.removeItem(STORAGE_KEYS.TOKEN);
-        localStorage.removeItem(STORAGE_KEYS.USER);
-        set({
-          user: null,
-          token: null,
-          isAuthenticated: false,
-        });
+      logout: async () => {
+        try {
+          await authApi.logout();
+        } catch (error) {
+          console.error('Logout error:', error);
+        } finally {
+          localStorage.removeItem(STORAGE_KEYS.TOKEN);
+          localStorage.removeItem(STORAGE_KEYS.USER);
+          localStorage.removeItem(STORAGE_KEYS.ORIGINAL_USER);
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            originalUser: null,
+            isImpersonating: false,
+          });
+        }
       },
 
       setUser: (user: User) => {
@@ -96,6 +74,31 @@ export const useAuthStore = create<AuthStore>()(
         const { token, user } = get();
         return !!(token && user);
       },
+
+      impersonate: (user: User) => {
+        const { user: currentUser } = get();
+        // Store original user if not already impersonating
+        if (!get().isImpersonating && currentUser) {
+          localStorage.setItem(STORAGE_KEYS.ORIGINAL_USER, JSON.stringify(currentUser));
+          set({
+            originalUser: currentUser,
+            user,
+            isImpersonating: true,
+          });
+        }
+      },
+
+      exitImpersonation: () => {
+        const { originalUser } = get();
+        if (originalUser) {
+          localStorage.removeItem(STORAGE_KEYS.ORIGINAL_USER);
+          set({
+            user: originalUser,
+            originalUser: null,
+            isImpersonating: false,
+          });
+        }
+      },
     }),
     {
       name: 'auth-storage',
@@ -104,6 +107,14 @@ export const useAuthStore = create<AuthStore>()(
         token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        // After rehydration, ensure isAuthenticated matches the presence of user and token
+        if (state && state.user && state.token) {
+          state.isAuthenticated = true;
+        } else {
+          state.isAuthenticated = false;
+        }
+      },
     }
   )
 );

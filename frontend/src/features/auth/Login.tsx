@@ -1,24 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { Button, Input, Alert } from '../../components/common';
 import { APP_NAME } from '../../utils/constants';
 import { GraduationCap, Eye, EyeOff, User, Lock } from 'lucide-react';
+import api from '../../services/axios';
+
+interface PublicStats {
+  students: number;
+  teachers: number;
+  classes: number;
+}
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated, isLoading } = useAuth();
+  const { login, isAuthenticated, isLoading, user, token } = useAuth();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [stats, setStats] = useState<PublicStats>({ students: 0, teachers: 0, classes: 0 });
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
 
-  if (isAuthenticated) {
+  // Fetch public stats on mount
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await api.get('/auth/public-stats');
+        if (response.data) {
+          setStats(response.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch public stats:', err);
+      }
+    };
+    fetchStats();
+  }, []);
+
+  // Only redirect if truly authenticated (has both user and token)
+  if (isAuthenticated && user && token) {
     return <Navigate to={from} replace />;
   }
 
@@ -57,9 +81,7 @@ const Login: React.FC = () => {
           <div className="mb-6 p-4 bg-primary-50 rounded-lg border border-primary-100">
             <p className="text-sm text-primary-800 font-medium mb-2">Demo Credentials:</p>
             <div className="text-xs text-primary-700 space-y-1">
-              <p><strong>Admin:</strong> admin / admin123</p>
-              <p><strong>Form Teacher:</strong> formteacher / form123</p>
-              <p><strong>Subject Teacher:</strong> teacher / teacher123</p>
+              <p><strong>Admin:</strong> admin / Admin@123</p>
             </div>
           </div>
 
@@ -152,15 +174,15 @@ const Login: React.FC = () => {
           </p>
           <div className="grid grid-cols-3 gap-6 text-center">
             <div className="p-4 bg-white/10 rounded-xl backdrop-blur-sm">
-              <div className="text-3xl font-bold mb-1">500+</div>
+              <div className="text-3xl font-bold mb-1">{stats.students || '—'}</div>
               <div className="text-sm text-primary-200">Students</div>
             </div>
             <div className="p-4 bg-white/10 rounded-xl backdrop-blur-sm">
-              <div className="text-3xl font-bold mb-1">50+</div>
+              <div className="text-3xl font-bold mb-1">{stats.teachers || '—'}</div>
               <div className="text-sm text-primary-200">Teachers</div>
             </div>
             <div className="p-4 bg-white/10 rounded-xl backdrop-blur-sm">
-              <div className="text-3xl font-bold mb-1">20+</div>
+              <div className="text-3xl font-bold mb-1">{stats.classes || '—'}</div>
               <div className="text-sm text-primary-200">Classes</div>
             </div>
           </div>

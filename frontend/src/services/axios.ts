@@ -10,13 +10,21 @@ const axiosInstance = axios.create({
   },
 });
 
-// Request interceptor
+// Request interceptor - adds token to all requests
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    console.log('🔑 [AXIOS] Storage key used:', STORAGE_KEYS.TOKEN);
+    console.log('🔑 [AXIOS] Token from localStorage:', token ? `${token.substring(0, 30)}...` : 'NULL/UNDEFINED');
+    console.log('🔑 [AXIOS] Request URL:', config.url);
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('✅ [AXIOS] Authorization header added');
+    } else {
+      console.log('❌ [AXIOS] NO TOKEN - Authorization header NOT added');
     }
+    
     return config;
   },
   (error: AxiosError) => {
@@ -24,16 +32,28 @@ axiosInstance.interceptors.request.use(
   }
 );
 
-// Response interceptor
+// Response interceptor - handle errors globally
 axiosInstance.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    return response;
+  },
   (error: AxiosError) => {
+    console.error('🔥 [AXIOS ERROR]:', {
+      status: error.response?.status,
+      url: error.config?.url,
+      method: error.config?.method,
+      data: error.response?.data,
+      params: error.config?.params,
+    });
+
+    // Handle 401 Unauthorized - redirect to login
     if (error.response?.status === 401) {
-      // Clear auth data and redirect to login
+      console.log('🚪 [AXIOS] Unauthorized - clearing auth');
       localStorage.removeItem(STORAGE_KEYS.TOKEN);
       localStorage.removeItem(STORAGE_KEYS.USER);
       window.location.href = '/login';
     }
+
     return Promise.reject(error);
   }
 );

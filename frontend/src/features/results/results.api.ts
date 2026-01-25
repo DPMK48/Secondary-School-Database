@@ -9,7 +9,7 @@ export interface ResultFilters {
   session_id?: number;
   teacher_id?: number;
   page?: number;
-  per_page?: number;
+  perPage?: number;
 }
 
 export interface ScoreEntryData {

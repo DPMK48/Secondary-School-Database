@@ -1,18 +1,20 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRole } from '../../hooks/useRole';
 import { useDebounce } from '../../hooks/useDebounce';
 import { Button, Input, Select, Table, Pagination, Badge, Avatar, Card, Modal, Alert } from '../../components/common';
-import { mockStudents, mockClasses, getClassDisplayName } from '../../utils/mockData';
+import { mockClasses, getClassDisplayName } from '../../utils/mockData';
 import { getFullName, formatDate } from '../../utils/helpers';
 import { STATUS_COLORS } from '../../utils/constants';
 import type { Student } from '../../types';
-import { Search, Plus, Download, Eye, Edit, Trash2, Users } from 'lucide-react';
+import { Search, Plus, Download, Eye, Edit, Trash2, Users, FileSpreadsheet, FileText } from 'lucide-react';
 import StudentForm from './StudentForm';
+import { useStudentsQuery, useDeleteStudentMutation } from '../../hooks/useStudents';
+import { useClassesQuery } from '../../hooks/useClasses';
 
 const StudentList: React.FC = () => {
   const navigate = useNavigate();
-  const { canManageStudents } = useRole();
+  const { canManageStudents, isAuthenticated, token } = useRole();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [classFilter, setClassFilter] = useState('');
@@ -21,33 +23,60 @@ const StudentList: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
-  const debouncedSearch = useDebounce(searchQuery, 300);
+  const debouncedSearch = useDebounce(searchQuery, 500);
   const itemsPerPage = 10;
 
-  // Filter students
-  const filteredStudents = useMemo(() => {
-    return mockStudents.filter((student) => {
-      const matchesSearch =
-        !debouncedSearch ||
-        getFullName(student.first_name, student.last_name)
-          .toLowerCase()
-          .includes(debouncedSearch.toLowerCase()) ||
-        student.admission_no.toLowerCase().includes(debouncedSearch.toLowerCase());
+  // Fetch students with filters - only if authenticated
+  const { data: studentsData, isLoading, error, refetch } = useStudentsQuery({
+    search: debouncedSearch,
+    classId: classFilter ? parseInt(classFilter) : undefined,
+    status: statusFilter || undefined,
+    page: currentPage,
+    perPage: itemsPerPage,
+  }, { enabled: isAuthenticated && !!token });
 
-      const matchesClass = !classFilter || student.current_class_id === parseInt(classFilter);
-      const matchesStatus = !statusFilter || student.status === statusFilter;
+  // Fetch classes for filter dropdown - only if authenticated
+  const { data: classesData } = useClassesQuery({}, { enabled: isAuthenticated && !!token });
 
-      return matchesSearch && matchesClass && matchesStatus;
-    });
+  // Delete mutation
+  const deleteMutation = useDeleteStudentMutation();
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
   }, [debouncedSearch, classFilter, statusFilter]);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
-  const paginatedStudents = filteredStudents.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showExportMenu && !target.closest('.export-dropdown')) {
+        setShowExportMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportMenu]);
+
+  // Get data from API response
+  const students = studentsData?.data || [];
+  const meta = studentsData?.meta || { total: 0, page: 1, perPage: itemsPerPage, totalPages: 0 };
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    if (!students.length) {
+      return { total: 0, active: 0, male: 0, female: 0 };
+    }
+    return {
+      total: meta.total,
+      active: students.filter((s: Student) => s.status === 'Active').length,
+      male: students.filter((s: Student) => s.gender === 'Male').length,
+      female: students.filter((s: Student) => s.gender === 'Female').length,
+    };
+  }, [students, meta.total]);
 
   const handleDelete = (student: Student) => {
     setSelectedStudent(student);
@@ -64,26 +93,89 @@ const StudentList: React.FC = () => {
     setShowFormModal(true);
   };
 
-  const handleSaveStudent = (data: Partial<Student>) => {
-    if (selectedStudent) {
-      console.log('Updating student:', selectedStudent.id, data);
-      // TODO: Call API to update student
-    } else {
-      console.log('Creating new student:', data);
-      // TODO: Call API to create student
+  const confirmDelete = async () => {
+    if (!selectedStudent) return;
+
+    try {
+      await deleteMutation.mutateAsync(selectedStudent.id);
+      setShowDeleteModal(false);
+      setSelectedStudent(null);
+      refetch();
+    } catch (error) {
+      console.error('Error deleting student:', error);
+      // Error will be shown by mutation
     }
-    setShowFormModal(false);
   };
 
-  const confirmDelete = () => {
-    // In production, this would call the API
-    console.log('Deleting student:', selectedStudent?.id);
-    setShowDeleteModal(false);
-    setSelectedStudent(null);
+  // Export functions
+  const exportToCSV = () => {
+    if (!students.length) return;
+
+    const headers = ['Admission No', 'First Name', 'Last Name', 'Gender', 'Date of Birth', 'Class', 'Status'];
+    const rows = students.map((student: Student) => [
+      student.admission_no,
+      student.first_name,
+      student.last_name,
+      student.gender,
+      formatDate(student.date_of_birth),
+      student.currentClass?.class_name || '-',
+      student.status,
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `students_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setShowExportMenu(false);
   };
 
-  const classOptions = mockClasses.map((c) => ({
-    value: c.id,
+  const exportToExcel = () => {
+    // For Excel export, we'll use the same CSV format but with .xls extension
+    // In production, you'd want to use a library like xlsx
+    if (!students.length) return;
+
+    const headers = ['Admission No', 'First Name', 'Last Name', 'Gender', 'Date of Birth', 'Class', 'Status', 'Guardian Name', 'Guardian Phone'];
+    const rows = students.map((student: Student) => [
+      student.admission_no,
+      student.first_name,
+      student.last_name,
+      student.gender,
+      formatDate(student.date_of_birth),
+      student.currentClass?.class_name || '-',
+      student.status,
+      student.guardian_name || '-',
+      student.guardian_phone || '-',
+    ]);
+
+    const csvContent = [
+      headers.join('\t'),
+      ...rows.map(row => row.join('\t'))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'application/vnd.ms-excel' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `students_${new Date().toISOString().split('T')[0]}.xls`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setShowExportMenu(false);
+  };
+
+  const classOptions = (classesData?.data || []).map((c: any) => ({
+    value: c.id.toString(),
     label: getClassDisplayName(c),
   }));
 
@@ -100,12 +192,16 @@ const StudentList: React.FC = () => {
       header: 'Student',
       render: (_value: unknown, student: Student, _index: number) => (
         <div className="flex items-center gap-3">
-          <Avatar firstName={student.first_name} lastName={student.last_name} size="sm" />
+          <Avatar 
+            firstName={student.firstName || student.first_name || ''} 
+            lastName={student.lastName || student.last_name || ''} 
+            size="sm" 
+          />
           <div>
             <p className="font-medium text-secondary-900">
-              {getFullName(student.first_name, student.last_name)}
+              {getFullName(student.firstName || student.first_name || '', student.lastName || student.last_name || '')}
             </p>
-            <p className="text-xs text-secondary-500">{student.admission_no}</p>
+            <p className="text-xs text-secondary-500">{student.admissionNo || student.admission_no}</p>
           </div>
         </div>
       ),
@@ -114,9 +210,8 @@ const StudentList: React.FC = () => {
       key: 'class',
       header: 'Class',
       render: (_value: unknown, student: Student, _index: number) => {
-        const cls = mockClasses.find((c) => c.id === student.current_class_id);
-        return cls ? (
-          <Badge variant="info">{getClassDisplayName(cls)}</Badge>
+        return student.currentClass ? (
+          <Badge variant="info">{getClassDisplayName(student.currentClass)}</Badge>
         ) : (
           <span className="text-secondary-400">-</span>
         );
@@ -133,7 +228,7 @@ const StudentList: React.FC = () => {
       key: 'date_of_birth',
       header: 'Date of Birth',
       render: (_value: unknown, student: Student, _index: number) => (
-        <span className="text-secondary-700">{formatDate(student.date_of_birth)}</span>
+        <span className="text-secondary-700">{formatDate(student.dateOfBirth || student.date_of_birth || '')}</span>
       ),
     },
     {
@@ -204,7 +299,7 @@ const StudentList: React.FC = () => {
             </div>
             <div>
               <p className="text-xs text-secondary-500">Total Students</p>
-              <p className="text-xl font-bold text-secondary-900">{mockStudents.length}</p>
+              <p className="text-xl font-bold text-secondary-900">{isLoading ? '-' : stats.total}</p>
             </div>
           </div>
         </Card>
@@ -215,9 +310,7 @@ const StudentList: React.FC = () => {
             </div>
             <div>
               <p className="text-xs text-secondary-500">Active</p>
-              <p className="text-xl font-bold text-secondary-900">
-                {mockStudents.filter((s) => s.status === 'Active').length}
-              </p>
+              <p className="text-xl font-bold text-secondary-900">{isLoading ? '-' : stats.active}</p>
             </div>
           </div>
         </Card>
@@ -228,9 +321,7 @@ const StudentList: React.FC = () => {
             </div>
             <div>
               <p className="text-xs text-secondary-500">Male</p>
-              <p className="text-xl font-bold text-secondary-900">
-                {mockStudents.filter((s) => s.gender === 'Male').length}
-              </p>
+              <p className="text-xl font-bold text-secondary-900">{isLoading ? '-' : stats.male}</p>
             </div>
           </div>
         </Card>
@@ -241,9 +332,7 @@ const StudentList: React.FC = () => {
             </div>
             <div>
               <p className="text-xs text-secondary-500">Female</p>
-              <p className="text-xl font-bold text-secondary-900">
-                {mockStudents.filter((s) => s.gender === 'Female').length}
-              </p>
+              <p className="text-xl font-bold text-secondary-900">{isLoading ? '-' : stats.female}</p>
             </div>
           </div>
         </Card>
@@ -273,34 +362,88 @@ const StudentList: React.FC = () => {
               onChange={setStatusFilter}
               placeholder="All Statuses"
             />
-            <Button variant="outline" leftIcon={<Download className="h-4 w-4" />}>
-              Export
-            </Button>
+            <div className="relative export-dropdown">
+              <Button 
+                variant="outline" 
+                leftIcon={<Download className="h-4 w-4" />}
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                disabled={!students.length || isLoading}
+              >
+                Export
+              </Button>
+              {showExportMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-secondary-200 z-10">
+                  <button
+                    onClick={exportToCSV}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-secondary-50 flex items-center gap-2 rounded-t-lg"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Export as CSV
+                  </button>
+                  <button
+                    onClick={exportToExcel}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-secondary-50 flex items-center gap-2 rounded-b-lg"
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Export as Excel
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </Card>
 
       {/* Results info */}
       <div className="text-sm text-secondary-500">
-        Showing {filteredStudents.length} student{filteredStudents.length !== 1 ? 's' : ''}
+        {isLoading ? 'Loading...' : `Showing ${students.length} of ${meta.total} student${meta.total !== 1 ? 's' : ''}`}
       </div>
 
+      {/* Error State */}
+      {error && (
+        <Alert variant="danger">
+          Failed to load students. Please try again.
+        </Alert>
+      )}
+
+      {/* Empty State */}
+      {!isLoading && !error && students.length === 0 && (
+        <Card>
+          <div className="text-center py-12">
+            <Users className="h-12 w-12 text-secondary-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-secondary-900 mb-2">No students found</h3>
+            <p className="text-secondary-500 mb-4">
+              {searchQuery || classFilter || statusFilter
+                ? 'Try adjusting your filters'
+                : 'Get started by adding your first student'}
+            </p>
+            {canManageStudents && !searchQuery && !classFilter && !statusFilter && (
+              <Button onClick={handleAdd} leftIcon={<Plus className="h-4 w-4" />}>
+                Add Student
+              </Button>
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* Table */}
-      <Table<Student>
-        columns={columns}
-        data={paginatedStudents}
-        keyExtractor={(student) => student.id}
-        onRowClick={(student) => navigate(`/dashboard/students/${student.id}`)}
-        hoverable
-      />
+      {!isLoading && !error && students.length > 0 && (
+        <Table<Student>
+          columns={columns}
+          data={students}
+          keyExtractor={(student) => student.id}
+          onRowClick={(student) => navigate(`/dashboard/students/${student.id}`)}
+          hoverable
+        />
+      )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {!isLoading && meta.totalPages > 1 && (
         <Pagination
           currentPage={currentPage}
-          totalPages={totalPages}
+          totalPages={meta.totalPages}
           onPageChange={setCurrentPage}
-          totalItems={filteredStudents.length}
+          totalItems={meta.total}
           itemsPerPage={itemsPerPage}
         />
       )}
@@ -308,9 +451,11 @@ const StudentList: React.FC = () => {
       {/* Student Form Modal */}
       <StudentForm
         isOpen={showFormModal}
-        onClose={() => setShowFormModal(false)}
+        onClose={() => {
+          setShowFormModal(false);
+          refetch();
+        }}
         student={selectedStudent}
-        onSave={handleSaveStudent}
       />
 
       {/* Delete Confirmation Modal */}
@@ -321,11 +466,19 @@ const StudentList: React.FC = () => {
         size="sm"
         footer={
           <>
-            <Button variant="outline" onClick={() => setShowDeleteModal(false)}>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDeleteModal(false)}
+              disabled={deleteMutation.isPending}
+            >
               Cancel
             </Button>
-            <Button variant="danger" onClick={confirmDelete}>
-              Delete
+            <Button 
+              variant="danger" 
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
             </Button>
           </>
         }
@@ -339,6 +492,11 @@ const StudentList: React.FC = () => {
           </strong>
           ? This action cannot be undone.
         </Alert>
+        {deleteMutation.isError && (
+          <Alert variant="danger" className="mt-4">
+            Failed to delete student. Please try again.
+          </Alert>
+        )}
       </Modal>
     </div>
   );

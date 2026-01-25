@@ -1,18 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Input, Select, Modal, Alert } from '../../components/common';
-import { mockClasses, getClassDisplayName } from '../../utils/mockData';
-import type { Student } from '../../types';
+import { Button, Input, Select, Modal, Alert, useToast } from '../../components/common';
+import type { Student, StudentStatus } from '../../types';
 import { Save, X } from 'lucide-react';
+import { useCreateStudentMutation, useUpdateStudentMutation } from '../../hooks/useStudents';
+import { useClassesQuery } from '../../hooks/useClasses';
 
 interface StudentFormProps {
   isOpen: boolean;
   onClose: () => void;
   student?: Student | null;
-  onSave: (data: Partial<Student>) => void;
 }
 
-const StudentForm: React.FC<StudentFormProps> = ({ isOpen, onClose, student, onSave }) => {
+const StudentForm: React.FC<StudentFormProps> = ({ isOpen, onClose, student }) => {
   const isEdit = !!student;
+  const toast = useToast();
+  
+  const createMutation = useCreateStudentMutation();
+  const updateMutation = useUpdateStudentMutation();
+  const { data: classesData } = useClassesQuery({});
 
   const [formData, setFormData] = useState({
     admission_no: '',
@@ -29,18 +34,19 @@ const StudentForm: React.FC<StudentFormProps> = ({ isOpen, onClose, student, onS
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string>('');
 
   useEffect(() => {
     if (student) {
       setFormData({
-        admission_no: student.admission_no || '',
-        first_name: student.first_name || '',
-        last_name: student.last_name || '',
+        admission_no: student.admissionNo || student.admission_no || '',
+        first_name: student.firstName || student.first_name || '',
+        last_name: student.lastName || student.last_name || '',
         gender: student.gender || '',
-        date_of_birth: student.date_of_birth || '',
-        current_class_id: student.current_class_id?.toString() || '',
-        guardian_name: student.guardian_name || '',
-        guardian_phone: student.guardian_phone || '',
+        date_of_birth: student.dateOfBirth || student.date_of_birth || '',
+        current_class_id: (student.currentClassId || student.current_class_id)?.toString() || '',
+        guardian_name: student.guardianName || student.guardian_name || '',
+        guardian_phone: student.guardianPhone || student.guardian_phone || '',
         address: student.address || '',
         status: student.status || 'Active',
       });
@@ -96,17 +102,38 @@ const StudentForm: React.FC<StudentFormProps> = ({ isOpen, onClose, student, onS
     }
 
     setIsSubmitting(true);
+    setSubmitError('');
 
     try {
-      const dataToSave = {
-        ...formData,
-        current_class_id: parseInt(formData.current_class_id),
+      const dataToSave: any = {
+        admissionNo: formData.admission_no,
+        firstName: formData.first_name,
+        lastName: formData.last_name,
+        gender: formData.gender as 'Male' | 'Female',
+        dateOfBirth: formData.date_of_birth,
+        currentClassId: parseInt(formData.current_class_id),
+        guardianName: formData.guardian_name,
+        guardianPhone: formData.guardian_phone,
+        address: formData.address,
       };
 
-      onSave(dataToSave);
+      // Only include status when editing
+      if (isEdit) {
+        dataToSave.status = formData.status as StudentStatus;
+      }
+
+      if (isEdit && student) {
+        await updateMutation.mutateAsync({ id: student.student_id, data: dataToSave });
+        toast.success(`Student ${formData.first_name} ${formData.last_name} updated successfully!`);
+      } else {
+        await createMutation.mutateAsync(dataToSave);
+        toast.success(`Student ${formData.first_name} ${formData.last_name} added successfully!`);
+      }
+      
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving student:', error);
+      setSubmitError(error?.response?.data?.message || error?.message || 'Failed to save student');
     } finally {
       setIsSubmitting(false);
     }
@@ -120,10 +147,10 @@ const StudentForm: React.FC<StudentFormProps> = ({ isOpen, onClose, student, onS
     }
   };
 
-  const classOptions = mockClasses.map((cls) => ({
-    value: cls.id.toString(),
-    label: getClassDisplayName(cls),
-  }));
+  const classOptions = classesData?.data?.map((cls) => ({
+    value: cls.id?.toString() || '',
+    label: `${cls.className || cls.class_name || ''} ${cls.arm || ''}`.trim(),
+  })) || [];
 
   const genderOptions = [
     { value: 'Male', label: 'Male' },
@@ -145,6 +172,12 @@ const StudentForm: React.FC<StudentFormProps> = ({ isOpen, onClose, student, onS
       size="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
+        {submitError && (
+          <Alert variant="error" onClose={() => setSubmitError('')}>
+            {submitError}
+          </Alert>
+        )}
+        
         {/* Personal Information */}
         <div>
           <h3 className="text-sm font-semibold text-secondary-900 mb-4">Personal Information</h3>

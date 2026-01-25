@@ -5,14 +5,14 @@ export interface ClassFilters {
   level?: 'Junior' | 'Senior';
   search?: string;
   page?: number;
-  per_page?: number;
+  perPage?: number;
 }
 
 export interface CreateClassData {
-  class_name: string;
+  className: string;
   arm: 'A' | 'B' | 'C' | 'D';
   level: 'Junior' | 'Senior';
-  form_teacher_id?: number;
+  formTeacherId?: number;
 }
 
 export interface UpdateClassData extends Partial<CreateClassData> {}
@@ -21,44 +21,58 @@ export const classesApi = {
   /**
    * Get all classes with optional filters
    */
-  getAll: (filters?: ClassFilters) =>
-    api.get<PaginatedResponse<Class>>('/classes', { params: filters }),
+  getAll: async (filters?: ClassFilters) => {
+    const response = await api.get<any>('/classes', { params: filters });
+    return response.data;
+  },
 
   /**
    * Get single class by ID
    */
-  getById: (id: number) =>
-    api.get<ApiResponse<Class>>(`/classes/${id}`),
+  getById: async (id: number) => {
+    const response = await api.get<any>(`/classes/${id}`);
+    return response.data;
+  },
 
   /**
    * Create new class
    */
-  create: (data: CreateClassData) =>
-    api.post<ApiResponse<Class>>('/classes', data),
+  create: async (data: CreateClassData) => {
+    const response = await api.post<any>('/classes', data);
+    return response.data;
+  },
 
   /**
    * Update existing class
    */
-  update: (id: number, data: UpdateClassData) =>
-    api.put<ApiResponse<Class>>(`/classes/${id}`, data),
+  update: async (id: number, data: UpdateClassData) => {
+    const response = await api.patch<any>(`/classes/${id}`, data);
+    return response.data;
+  },
 
   /**
    * Delete class
    */
-  delete: (id: number) =>
-    api.delete<ApiResponse<void>>(`/classes/${id}`),
+  delete: async (id: number) => {
+    const response = await api.delete<any>(`/classes/${id}`);
+    return response.data;
+  },
 
   /**
    * Get students in a class
    */
-  getStudents: (id: number, params?: { page?: number; per_page?: number }) =>
-    api.get<PaginatedResponse<Student>>(`/classes/${id}/students`, { params }),
+  getStudents: async (id: number, params?: { page?: number; perPage?: number }) => {
+    const response = await api.get<any>(`/classes/${id}/students`, { params });
+    return response.data;
+  },
 
   /**
    * Get subjects for a class
    */
-  getSubjects: (id: number) =>
-    api.get<ApiResponse<ClassSubject[]>>(`/classes/${id}/subjects`),
+  getSubjects: async (id: number) => {
+    const response = await api.get<any>(`/classes/${id}/subjects`);
+    return response.data;
+  },
 
   /**
    * Assign subject to class

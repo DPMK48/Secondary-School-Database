@@ -1,112 +1,151 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRole } from '../../hooks/useRole';
+import { useAuth } from '../../hooks/useAuth';
 import { useDebounce } from '../../hooks/useDebounce';
-import { Button, Input, Table, Pagination, Badge, Avatar, Card, Modal, Alert } from '../../components/common';
-import { mockTeachers, mockTeacherSubjectAssignments, mockFormTeachers, mockSubjects, mockClasses, getClassDisplayName } from '../../utils/mockData';
+import { Button, Input, Table, Pagination, Badge, Avatar, Card, Modal, Alert, CredentialsModal } from '../../components/common';
+import { getClassDisplayName } from '../../utils/mockData';
 import { getFullName } from '../../utils/helpers';
 import type { Teacher } from '../../types';
-import { Search, Plus, Eye, Trash2, GraduationCap, BookOpen, School, Edit } from 'lucide-react';
+import { Search, Plus, Eye, Trash2, GraduationCap, BookOpen, School, Edit, LogIn } from 'lucide-react';
 import TeacherForm from './TeacherForm';
+import { useTeachersQuery, useDeleteTeacherMutation } from '../../hooks/useTeachers';
+
+// School code for credential generation
+const SCHOOL_CODE = 'ESS001'; // Excellence Secondary School
+
+// Generate teacher credentials
+const generateCredentials = (email: string) => {
+  const username = email.split('@')[0];
+  const password = `${SCHOOL_CODE}@2024`;
+  return { username, password };
+};
 
 const TeacherList: React.FC = () => {
   const navigate = useNavigate();
-  const { canManageTeachers } = useRole();
+  const { impersonate } = useAuth();
+  const { canManageTeachers, isAuthenticated, token } = useRole();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
-  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+  const [showConfirmLoginModal, setShowConfirmLoginModal] = useState(false);
+  const [showRoleSelectionModal, setShowRoleSelectionModal] = useState(false);
+  const [pendingRole, setPendingRole] = useState<string | null>(null);
+  const [generatedCredentials, setGeneratedCredentials] = useState<{
+    username: string;
+    password: string;
+    teacherEmail: string;
+    teacherName: string;
+  } | null>(null);
 
-  const debouncedSearch = useDebounce(searchQuery, 300);
+  const debouncedSearch = useDebounce(searchQuery, 500);
   const itemsPerPage = 10;
 
-  // Filter teachers
-  const filteredTeachers = useMemo(() => {
-    return mockTeachers.filter((teacher) => {
-      return (
-        !debouncedSearch ||
-        getFullName(teacher.first_name, teacher.last_name)
-          .toLowerCase()
-          .includes(debouncedSearch.toLowerCase()) ||
-        teacher.email.toLowerCase().includes(debouncedSearch.toLowerCase())
-      );
-    });
+  // Fetch teachers with filters - only if authenticated
+  const { data: teachersData, isLoading, error } = useTeachersQuery({
+    search: debouncedSearch,
+    page: currentPage,
+    perPage: itemsPerPage,
+  }, { enabled: isAuthenticated && !!token });
+
+  // Delete mutation
+  const deleteMutation = useDeleteTeacherMutation();
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
   }, [debouncedSearch]);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredTeachers.length / itemsPerPage);
-  const paginatedTeachers = filteredTeachers.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  // Get teacher's assignments
-  const getTeacherAssignments = (teacherId: number) => {
-    return mockTeacherSubjectAssignments.filter((a) => a.teacher_id === teacherId);
-  };
-
-  // Get form teacher's class
-  const getFormTeacherClass = (teacherId: number) => {
-    const ft = mockFormTeachers.find((f) => f.teacher_id === teacherId);
-    if (!ft) return null;
-    return mockClasses.find((c) => c.id === ft.class_id);
-  };
+  const teachers = teachersData?.data || [];
+  const totalPages = teachersData?.meta ? Math.ceil(teachersData.meta.total / itemsPerPage) : 1;
 
   const handleDelete = (teacher: Teacher) => {
     setSelectedTeacher(teacher);
     setShowDeleteModal(true);
   };
 
-  const handleAssign = (teacher: Teacher) => {
-    setSelectedTeacher(teacher);
-    setShowAssignModal(true);
-  };
-
-  const handleAdd = () => {
-    setSelectedTeacher(null);
-    setShowFormModal(true);
-  };
-
-  const handleEdit = (teacher: Teacher) => {
-    setSelectedTeacher(teacher);
-    setShowFormModal(true);
-  };
-
-  const handleSaveTeacher = (data: Partial<Teacher>) => {
-    if (selectedTeacher) {
-      console.log('Updating teacher:', selectedTeacher.id, data);
-      // TODO: Call API to update teacher
-    } else {
-      console.log('Creating new teacher:', data);
-      // TODO: Call API to create teacher
+  const confirmDelete = async () => {
+    if (!selectedTeacher) return;
+    
+    try {
+      await deleteMutation.mutateAsync(selectedTeacher.id);
+      setShowDeleteModal(false);
+      setSelectedTeacher(null);
+    } catch (error) {
+      console.error('Failed to delete teacher:', error);
     }
-    setShowFormModal(false);
   };
 
-  const confirmDelete = () => {
-    console.log('Deleting teacher:', selectedTeacher?.id);
-    setShowDeleteModal(false);
-    setSelectedTeacher(null);
+  const performImpersonation = (teacher: Teacher, role: string) => {
+    // Create user object for impersonation
+    const impersonatedUser = {
+      id: teacher.user_id || teacher.id,
+      username: teacher.email.split('@')[0],
+      email: teacher.email,
+      role: role as 'Form Teacher' | 'Subject Teacher',
+      is_active: true,
+    };
+    
+    // Call impersonate function from auth store
+    if (impersonate) {
+      impersonate(impersonatedUser);
+      navigate('/dashboard');
+    }
+  };
+
+  const confirmLogin = async () => {
+    if (!selectedTeacher || !pendingRole) return;
+    
+    try {
+      // Perform impersonation with selected role
+      performImpersonation(selectedTeacher, pendingRole);
+      setShowConfirmLoginModal(false);
+      setSelectedTeacher(null);
+      setPendingRole(null);
+    } catch (error) {
+      console.error('Failed to login as teacher:', error);
+    }
+  };
+
+  const handleLoginAs = (teacher: any) => {
+    // Normalize teacher data
+    const normalizedTeacher = {
+      ...teacher,
+      first_name: teacher.first_name || teacher.firstName,
+      last_name: teacher.last_name || teacher.lastName,
+      staff_id: teacher.staff_id || teacher.staffId,
+      // Store form teacher status
+      isFormTeacher: (teacher.user?.role?.roleName || teacher.user?.role?.role_name) === 'Form Teacher',
+    };
+    setSelectedTeacher(normalizedTeacher);
+    // Always show role selection modal
+    setShowRoleSelectionModal(true);
   };
 
   const columns = [
     {
       key: 'teacher',
       header: 'Teacher',
-      render: (_value: unknown, teacher: Teacher, _index: number) => (
-        <div className="flex items-center gap-3">
-          <Avatar firstName={teacher.first_name} lastName={teacher.last_name} size="sm" />
-          <div>
-            <p className="font-medium text-secondary-900">
-              {getFullName(teacher.first_name, teacher.last_name)}
-            </p>
-            <p className="text-xs text-secondary-500">{teacher.email}</p>
+      render: (_value: unknown, teacher: any, _index: number) => {
+        // Handle both camelCase and snake_case from API
+        const firstName = teacher.first_name || teacher.firstName;
+        const lastName = teacher.last_name || teacher.lastName;
+        return (
+          <div className="flex items-center gap-3">
+            <Avatar firstName={firstName} lastName={lastName} size="sm" />
+            <div>
+              <p className="font-medium text-secondary-900">
+                {getFullName(firstName, lastName)}
+              </p>
+              <p className="text-xs text-secondary-500">{teacher.email}</p>
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: 'phone',
@@ -116,64 +155,16 @@ const TeacherList: React.FC = () => {
       ),
     },
     {
-      key: 'subjects',
-      header: 'Subjects',
-      render: (_value: unknown, teacher: Teacher, _index: number) => {
-        const assignments = getTeacherAssignments(teacher.id);
-        const subjectIds = [...new Set(assignments.map((a) => a.subject_id))];
-        const subjects = subjectIds.map((id) =>
-          mockSubjects.find((s) => s.id === id)?.subject_name
-        );
-        return (
-          <div className="flex flex-wrap gap-1">
-            {subjects.slice(0, 2).map((subject, i) => (
-              <Badge key={i} variant="info" size="sm">
-                {subject}
-              </Badge>
-            ))}
-            {subjects.length > 2 && (
-              <Badge variant="default" size="sm">
-                +{subjects.length - 2}
-              </Badge>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      key: 'classes',
-      header: 'Classes',
-      render: (_value: unknown, teacher: Teacher, _index: number) => {
-        const assignments = getTeacherAssignments(teacher.id);
-        const classIds = [...new Set(assignments.map((a) => a.class_id))];
-        return (
-          <span className="text-secondary-700">
-            {classIds.length} class{classIds.length !== 1 ? 'es' : ''}
-          </span>
-        );
-      },
-    },
-    {
-      key: 'role',
-      header: 'Role',
-      render: (_value: unknown, teacher: Teacher, _index: number) => {
-        const formTeacherClass = getFormTeacherClass(teacher.id);
-        return (
-          <div className="flex flex-col gap-1">
-            <Badge variant="primary" size="sm">Subject Teacher</Badge>
-            {formTeacherClass && (
-              <Badge variant="success" size="sm">
-                Form Teacher ({getClassDisplayName(formTeacherClass)})
-              </Badge>
-            )}
-          </div>
-        );
-      },
+      key: 'staff_id',
+      header: 'Staff ID',
+      render: (_value: unknown, teacher: any, _index: number) => (
+        <span className="text-secondary-700">{teacher.staff_id || teacher.staffId || 'N/A'}</span>
+      ),
     },
     {
       key: 'actions',
       header: 'Actions',
-      render: (_value: unknown, teacher: Teacher, _index: number) => (
+      render: (_value: unknown, teacher: any, _index: number) => (
         <div className="flex items-center gap-2">
           <button
             onClick={(e) => {
@@ -190,27 +181,24 @@ const TeacherList: React.FC = () => {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleEdit(teacher);
+                  handleLoginAs(teacher);
                 }}
-                className="p-2 text-secondary-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                title="Edit"
+                className="p-2 text-secondary-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                title="Login As"
               >
-                <Edit className="h-4 w-4" />
+                <LogIn className="h-4 w-4" />
               </button>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleAssign(teacher);
-                }}
-                className="p-2 text-secondary-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                title="Assign Subjects"
-              >
-                <BookOpen className="h-4 w-4" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(teacher);
+                  // Normalize teacher data before passing
+                  const normalizedTeacher = {
+                    ...teacher,
+                    first_name: teacher.first_name || teacher.firstName,
+                    last_name: teacher.last_name || teacher.lastName,
+                    staff_id: teacher.staff_id || teacher.staffId,
+                  };
+                  handleDelete(normalizedTeacher);
                 }}
                 className="p-2 text-secondary-500 hover:text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
                 title="Delete"
@@ -223,6 +211,16 @@ const TeacherList: React.FC = () => {
       ),
     },
   ];
+
+  const handleAdd = () => {
+    setSelectedTeacher(null);
+    setShowFormModal(true);
+  };
+
+  const handleEdit = (teacher: Teacher) => {
+    setSelectedTeacher(teacher);
+    setShowFormModal(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -250,7 +248,7 @@ const TeacherList: React.FC = () => {
             </div>
             <div>
               <p className="text-xs text-secondary-500">Total Teachers</p>
-              <p className="text-xl font-bold text-secondary-900">{mockTeachers.length}</p>
+              <p className="text-xl font-bold text-secondary-900">{teachersData?.meta?.total || 0}</p>
             </div>
           </div>
         </Card>
@@ -260,66 +258,63 @@ const TeacherList: React.FC = () => {
               <School className="h-5 w-5 text-green-600" />
             </div>
             <div>
-              <p className="text-xs text-secondary-500">Form Teachers</p>
-              <p className="text-xl font-bold text-secondary-900">{mockFormTeachers.length}</p>
-            </div>
-          </div>
-        </Card>
-        <Card padding="sm">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <BookOpen className="h-5 w-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-xs text-secondary-500">Subjects</p>
-              <p className="text-xl font-bold text-secondary-900">{mockSubjects.length}</p>
-            </div>
-          </div>
-        </Card>
-        <Card padding="sm">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-orange-100 rounded-lg">
-              <School className="h-5 w-5 text-orange-600" />
-            </div>
-            <div>
-              <p className="text-xs text-secondary-500">Classes</p>
-              <p className="text-xl font-bold text-secondary-900">{mockClasses.length}</p>
+              <p className="text-xs text-secondary-500">Active Teachers</p>
+              <p className="text-xl font-bold text-secondary-900">{teachers.length}</p>
             </div>
           </div>
         </Card>
       </div>
 
-      {/* Search */}
-      <Card>
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <Input
-              placeholder="Search by name or email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              leftIcon={<Search className="h-5 w-5" />}
-            />
-          </div>
+      {/* Loading & Error States */}
+      {isLoading && (
+        <div className="text-center py-8">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary-600 border-r-transparent"></div>
+          <p className="mt-2 text-secondary-600">Loading teachers...</p>
         </div>
-      </Card>
+      )}
 
-      {/* Table */}
-      <Table
-        columns={columns}
-        data={paginatedTeachers}
-        keyExtractor={(teacher) => teacher.id}
-        hoverable
-      />
+      {error && (
+        <Alert variant="danger">
+          Failed to load teachers. Please try again.
+        </Alert>
+      )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={setCurrentPage}
-          totalItems={filteredTeachers.length}
-          itemsPerPage={itemsPerPage}
-        />
+      {!isLoading && !error && (
+        <>
+          {/* Search and Table */}
+          <Card>
+            <div className="p-6">
+              <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <Input
+                    placeholder="Search by name or email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    leftIcon={<Search className="h-5 w-5" />}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Table
+              columns={columns}
+              data={teachers}
+              keyExtractor={(teacher) => teacher.id}
+              hoverable
+            />
+          </Card>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              totalItems={teachersData?.meta?.total || 0}
+              itemsPerPage={itemsPerPage}
+            />
+          )}
+        </>
       )}
 
       {/* Delete Modal */}
@@ -343,7 +338,10 @@ const TeacherList: React.FC = () => {
           Are you sure you want to delete{' '}
           <strong>
             {selectedTeacher
-              ? getFullName(selectedTeacher.first_name, selectedTeacher.last_name)
+              ? getFullName(
+                  selectedTeacher.first_name || (selectedTeacher as any).firstName,
+                  selectedTeacher.last_name || (selectedTeacher as any).lastName
+                )
               : ''}
           </strong>
           ? This action cannot be undone.
@@ -355,29 +353,135 @@ const TeacherList: React.FC = () => {
         isOpen={showFormModal}
         onClose={() => setShowFormModal(false)}
         teacher={selectedTeacher}
-        onSave={handleSaveTeacher}
       />
 
-      {/* Assign Modal */}
+      {/* Credentials Modal */}
+      {generatedCredentials && (
+        <CredentialsModal
+          isOpen={showCredentialsModal}
+          onClose={() => {
+            setShowCredentialsModal(false);
+            setGeneratedCredentials(null);
+          }}
+          credentials={{
+            username: generatedCredentials.username,
+            password: generatedCredentials.password,
+          }}
+          teacherEmail={generatedCredentials.teacherEmail}
+          teacherName={generatedCredentials.teacherName}
+          role="subject_teacher"
+          emailSent={true}
+        />
+      )}
+
+      {/* Confirm Login Modal */}
       <Modal
-        isOpen={showAssignModal}
-        onClose={() => setShowAssignModal(false)}
-        title="Assign Subjects"
-        size="lg"
+        isOpen={showConfirmLoginModal}
+        onClose={() => {
+          setShowConfirmLoginModal(false);
+          setSelectedTeacher(null);
+          setPendingRole(null);
+        }}
+        title="Confirm Impersonation"
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowConfirmLoginModal(false);
+                setSelectedTeacher(null);
+                setPendingRole(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={confirmLogin}>
+              Confirm Login
+            </Button>
+          </>
+        }
       >
         <div className="space-y-4">
-          <p className="text-secondary-600">
-            Assign subjects and classes to{' '}
-            <strong>
-              {selectedTeacher
-                ? getFullName(selectedTeacher.first_name, selectedTeacher.last_name)
-                : ''}
-            </strong>
-          </p>
-          <Alert variant="info">
-            Subject assignment feature coming soon. This will allow you to assign multiple
-            subjects and classes to a teacher.
+          <Alert variant="warning">
+            You are about to log in as <strong>{selectedTeacher && getFullName(selectedTeacher.first_name, selectedTeacher.last_name)}</strong> with the role of <strong>{pendingRole}</strong>.
           </Alert>
+          <p className="text-sm text-gray-600">
+            This will switch your account view to the teacher's perspective. You can return to your admin account at any time using the "Exit Impersonation" button.
+          </p>
+        </div>
+      </Modal>
+
+      {/* Role Selection Modal */}
+      <Modal
+        isOpen={showRoleSelectionModal}
+        onClose={() => {
+          setShowRoleSelectionModal(false);
+          setSelectedTeacher(null);
+        }}
+        title="Login As Teacher"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            {(selectedTeacher as any)?.isFormTeacher ? (
+              <>
+                <strong>{selectedTeacher && getFullName(selectedTeacher.first_name, selectedTeacher.last_name)}</strong> has both Subject Teacher and Form Teacher roles.
+                Please select which role you want to impersonate:
+              </>
+            ) : (
+              <>
+                You are about to login as <strong>{selectedTeacher && getFullName(selectedTeacher.first_name, selectedTeacher.last_name)}</strong> (Subject Teacher).
+                This will switch your account view to the teacher's perspective.
+              </>
+            )}
+          </p>
+          
+          <div className="space-y-3">
+            <button
+              onClick={() => {
+                if (selectedTeacher) {
+                  performImpersonation(selectedTeacher, 'Subject Teacher');
+                  setShowRoleSelectionModal(false);
+                  setSelectedTeacher(null);
+                }
+              }}
+              className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-blue-200">
+                  <BookOpen className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">Subject Teacher</p>
+                  <p className="text-xs text-gray-500">Access to assigned subjects and classes</p>
+                </div>
+              </div>
+            </button>
+
+            {(selectedTeacher as any)?.isFormTeacher && (
+              <button
+                onClick={() => {
+                  if (selectedTeacher) {
+                    performImpersonation(selectedTeacher, 'Form Teacher');
+                    setShowRoleSelectionModal(false);
+                    setSelectedTeacher(null);
+                  }
+                }}
+                className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-all text-left group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center group-hover:bg-green-200">
+                    <School className="h-5 w-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900">Form Teacher</p>
+                    <p className="text-xs text-gray-500">Access to form class management</p>
+                  </div>
+                </div>
+              </button>
+            )}
+          </div>
         </div>
       </Modal>
     </div>

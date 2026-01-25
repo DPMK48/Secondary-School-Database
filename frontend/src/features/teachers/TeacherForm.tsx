@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Input, Select, Modal } from '../../components/common';
+import { Button, Input, Select, Modal, Alert, useToast, CredentialsModal } from '../../components/common';
 import type { Teacher } from '../../types';
 import { Save, X } from 'lucide-react';
+import { useCreateTeacherMutation, useUpdateTeacherMutation } from '../../hooks/useTeachers';
 
 interface TeacherFormProps {
   isOpen: boolean;
   onClose: () => void;
   teacher?: Teacher | null;
-  onSave: (data: Partial<Teacher>) => void;
 }
 
-const TeacherForm: React.FC<TeacherFormProps> = ({ isOpen, onClose, teacher, onSave }) => {
+const TeacherForm: React.FC<TeacherFormProps> = ({ isOpen, onClose, teacher }) => {
   const isEdit = !!teacher;
+  const toast = useToast();
+  
+  const createMutation = useCreateTeacherMutation();
+  const updateMutation = useUpdateTeacherMutation();
 
   const [formData, setFormData] = useState({
     staff_id: '',
@@ -26,6 +30,12 @@ const TeacherForm: React.FC<TeacherFormProps> = ({ isOpen, onClose, teacher, onS
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string>('');
+  const [showCredentials, setShowCredentials] = useState(false);
+  const [generatedCredentials, setGeneratedCredentials] = useState<{
+    username: string;
+    password: string;
+  } | null>(null);
 
   useEffect(() => {
     if (teacher) {
@@ -53,14 +63,14 @@ const TeacherForm: React.FC<TeacherFormProps> = ({ isOpen, onClose, teacher, onS
       });
     }
     setErrors({});
+    setSubmitError('');
+    setShowCredentials(false);
+    setGeneratedCredentials(null);
   }, [teacher, isOpen]);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.staff_id.trim()) {
-      newErrors.staff_id = 'Staff ID is required';
-    }
     if (!formData.first_name.trim()) {
       newErrors.first_name = 'First name is required';
     }
@@ -75,9 +85,6 @@ const TeacherForm: React.FC<TeacherFormProps> = ({ isOpen, onClose, teacher, onS
     if (!formData.phone.trim()) {
       newErrors.phone = 'Phone number is required';
     }
-    if (!formData.employment_date) {
-      newErrors.employment_date = 'Employment date is required';
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -91,15 +98,69 @@ const TeacherForm: React.FC<TeacherFormProps> = ({ isOpen, onClose, teacher, onS
     }
 
     setIsSubmitting(true);
+    setSubmitError('');
 
     try {
-      onSave(formData);
-      onClose();
-    } catch (error) {
+      const dataToSave: any = {
+        firstName: formData.first_name,
+        lastName: formData.last_name,
+        email: formData.email,
+        phone: formData.phone,
+      };
+
+      // Only include optional fields if they have values
+      if (formData.staff_id && formData.staff_id.trim()) {
+        dataToSave.staffId = formData.staff_id;
+      }
+      if (formData.address && formData.address.trim()) {
+        dataToSave.address = formData.address;
+      }
+      if (formData.employment_date && formData.employment_date.trim()) {
+        dataToSave.employmentDate = formData.employment_date;
+      }
+      if (isEdit && formData.status) {
+        dataToSave.status = formData.status;
+      }
+
+      if (isEdit && teacher) {
+        await updateMutation.mutateAsync({ id: teacher.id, data: dataToSave });
+        toast.success(`Teacher ${formData.first_name} ${formData.last_name} updated successfully!`);
+        onClose();
+      } else {
+        const response = await createMutation.mutateAsync(dataToSave);
+        toast.success(`Teacher ${formData.first_name} ${formData.last_name} added successfully!`);
+        
+        // Check if credentials were returned
+        if (response?.credentials) {
+          setGeneratedCredentials(response.credentials);
+          setShowCredentials(true);
+          // Don't close the modal yet, let the user see credentials first
+        } else {
+          onClose();
+        }
+      }
+    } catch (error: any) {
       console.error('Error saving teacher:', error);
+      console.error('Error response:', error?.response?.data);
+      const errorMessage = error?.response?.data?.message;
+      if (Array.isArray(errorMessage)) {
+        const errorText = errorMessage.join(', ');
+        setSubmitError(errorText);
+        toast.error(errorText);
+      } else {
+        const errorText = errorMessage || error?.message || 'Failed to save teacher';
+        setSubmitError(errorText);
+        toast.error(errorText);
+      }
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleCredentialsClose = () => {
+    setShowCredentials(false);
+    setGeneratedCredentials(null);
+    onClose();
   };
 
   const handleChange = (field: string, value: string) => {
@@ -130,20 +191,18 @@ const TeacherForm: React.FC<TeacherFormProps> = ({ isOpen, onClose, teacher, onS
           <h3 className="text-sm font-semibold text-secondary-900 mb-4">Personal Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
-              label="Staff ID"
-              placeholder="e.g., TCH2024001"
+              label="Staff ID (Optional)"
+              placeholder="Auto-generated if left empty"
               value={formData.staff_id}
               onChange={(e) => handleChange('staff_id', e.target.value)}
               error={errors.staff_id}
-              required
             />
             <Input
-              label="Employment Date"
+              label="Employment Date (Optional)"
               type="date"
               value={formData.employment_date}
               onChange={(e) => handleChange('employment_date', e.target.value)}
               error={errors.employment_date}
-              required
             />
             <Input
               label="First Name"
@@ -205,6 +264,13 @@ const TeacherForm: React.FC<TeacherFormProps> = ({ isOpen, onClose, teacher, onS
           </div>
         </div>
 
+        {/* Error Display */}
+        {submitError && (
+          <Alert variant="error" className="mt-4">
+            {submitError}
+          </Alert>
+        )}
+
         {/* Form Actions */}
         <div className="flex justify-end gap-3 pt-4 border-t">
           <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
@@ -217,6 +283,19 @@ const TeacherForm: React.FC<TeacherFormProps> = ({ isOpen, onClose, teacher, onS
           </Button>
         </div>
       </form>
+
+      {/* Credentials Modal */}
+      {showCredentials && generatedCredentials && (
+        <CredentialsModal
+          isOpen={showCredentials}
+          onClose={handleCredentialsClose}
+          credentials={generatedCredentials}
+          teacherEmail={formData.email}
+          teacherName={`${formData.first_name} ${formData.last_name}`}
+          role="subject_teacher"
+          emailSent={false}
+        />
+      )}
     </Modal>
   );
 };

@@ -1,11 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { Button, Input, Card, CardHeader, CardTitle, CardContent, Alert, Select } from '../../components/common';
+import { Button, Input, Card, CardHeader, CardTitle, CardContent, Alert, Select, useToast, Spinner } from '../../components/common';
 import { Lock, Bell, Calendar, School, Save } from 'lucide-react';
+import { settingsApi, type SessionData, type TermData } from '../../services/settings.service';
 
 const Settings: React.FC = () => {
   const { user } = useAuth();
+  const toast = useToast();
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isLoadingPassword, setIsLoadingPassword] = useState(false);
+  const [isLoadingSystem, setIsLoadingSystem] = useState(false);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(true);
+  
+  const [sessions, setSessions] = useState<SessionData[]>([]);
+  const [terms, setTerms] = useState<TermData[]>([]);
+  const [currentSession, setCurrentSession] = useState<SessionData | null>(null);
+  const [currentTerm, setCurrentTerm] = useState<TermData | null>(null);
+  
   const [passwordData, setPasswordData] = useState({
     current_password: '',
     new_password: '',
@@ -20,16 +31,57 @@ const Settings: React.FC = () => {
   });
 
   const [systemSettings, setSystemSettings] = useState({
-    current_session: '2024/2025',
-    current_term: '1',
+    current_session: '',
+    current_term: '',
   });
+
+  // Load sessions and terms on mount
+  useEffect(() => {
+    loadSessionsAndTerms();
+  }, []);
+
+  const loadSessionsAndTerms = async () => {
+    try {
+      setIsLoadingSessions(true);
+      const [sessionsResponse, termsResponse, currentSessionResponse, currentTermResponse] = await Promise.allSettled([
+        settingsApi.getSessions(),
+        settingsApi.getTerms(),
+        settingsApi.getCurrentSession(),
+        settingsApi.getCurrentTerm(),
+      ]);
+
+      if (sessionsResponse.status === 'fulfilled') {
+        setSessions(sessionsResponse.value.data);
+      }
+
+      if (termsResponse.status === 'fulfilled') {
+        setTerms(termsResponse.value.data);
+      }
+
+      if (currentSessionResponse.status === 'fulfilled') {
+        const session = currentSessionResponse.value.data;
+        setCurrentSession(session);
+        setSystemSettings((prev) => ({ ...prev, current_session: session.id.toString() }));
+      }
+
+      if (currentTermResponse.status === 'fulfilled') {
+        const term = currentTermResponse.value.data;
+        setCurrentTerm(term);
+        setSystemSettings((prev) => ({ ...prev, current_term: term.id.toString() }));
+      }
+    } catch (error) {
+      console.error('Error loading sessions and terms:', error);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  };
 
   const handlePasswordChange = (field: string, value: string) => {
     setPasswordData((prev) => ({ ...prev, [field]: value }));
     setPasswordError('');
   };
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!passwordData.current_password || !passwordData.new_password || !passwordData.confirm_password) {
@@ -47,16 +99,27 @@ const Settings: React.FC = () => {
       return;
     }
 
-    console.log('Changing password...');
-    // TODO: Call API to change password
-    
-    setPasswordData({
-      current_password: '',
-      new_password: '',
-      confirm_password: '',
-    });
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
+    try {
+      setIsLoadingPassword(true);
+      await settingsApi.changePassword({
+        oldPassword: passwordData.current_password,
+        newPassword: passwordData.new_password,
+      });
+      
+      setPasswordData({
+        current_password: '',
+        new_password: '',
+        confirm_password: '',
+      });
+      toast.success('Password changed successfully!');
+    } catch (error: any) {
+      console.error('Error changing password:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to change password';
+      setPasswordError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsLoadingPassword(false);
+    }
   };
 
   const handleNotificationToggle = (field: string) => {
@@ -67,24 +130,44 @@ const Settings: React.FC = () => {
     setSystemSettings((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSaveSystemSettings = () => {
-    console.log('Saving system settings:', systemSettings);
-    // TODO: Call API to save system settings
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
+  const handleSaveSystemSettings = async () => {
+    try {
+      setIsLoadingSystem(true);
+      const sessionId = parseInt(systemSettings.current_session);
+      const termId = parseInt(systemSettings.current_term);
+
+      if (!sessionId || !termId) {
+        toast.error('Please select both session and term');
+        return;
+      }
+
+      await settingsApi.setCurrentSessionAndTerm(sessionId, termId);
+      
+      // Reload current session and term
+      await loadSessionsAndTerms();
+      
+      toast.success('Current session and term updated successfully!');
+    } catch (error: any) {
+      console.error('Error saving system settings:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update system settings';
+      toast.error(errorMessage);
+    } finally {
+      setIsLoadingSystem(false);
+    }
   };
 
-  const sessionOptions = [
-    { value: '2023/2024', label: '2023/2024' },
-    { value: '2024/2025', label: '2024/2025' },
-    { value: '2025/2026', label: '2025/2026' },
-  ];
+  // Generate options from loaded data
+  const sessionOptions = sessions.map((session) => ({
+    value: session.id.toString(),
+    label: session.sessionName,
+  }));
 
-  const termOptions = [
-    { value: '1', label: 'First Term' },
-    { value: '2', label: 'Second Term' },
-    { value: '3', label: 'Third Term' },
-  ];
+  const termOptions = terms
+    .filter((term) => term.sessionId.toString() === systemSettings.current_session)
+    .map((term) => ({
+      value: term.id.toString(),
+      label: term.termName,
+    }));
 
   return (
     <div className="space-y-6">
@@ -141,8 +224,8 @@ const Settings: React.FC = () => {
                 leftIcon={<Lock className="h-5 w-5" />}
               />
               
-              <Button type="submit" className="w-full" leftIcon={<Save className="h-4 w-4" />}>
-                Update Password
+              <Button type="submit" className="w-full" leftIcon={<Save className="h-4 w-4" />} disabled={isLoadingPassword}>
+                {isLoadingPassword ? 'Updating...' : 'Update Password'}
               </Button>
             </form>
           </CardContent>
@@ -220,7 +303,7 @@ const Settings: React.FC = () => {
       </div>
 
       {/* System Settings (Admin Only) */}
-      {user?.role === 'admin' && (
+      {user?.role === 'Admin' && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -229,54 +312,50 @@ const Settings: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Select
-                  label="Current Academic Session"
-                  options={sessionOptions}
-                  value={systemSettings.current_session}
-                  onChange={(value) => handleSystemSettingChange('current_session', value)}
-                />
-                <Select
-                  label="Current Term"
-                  options={termOptions}
-                  value={systemSettings.current_term}
-                  onChange={(value) => handleSystemSettingChange('current_term', value)}
-                />
+            {isLoadingSessions ? (
+              <div className="flex justify-center py-8">
+                <Spinner size="lg" />
               </div>
-              
-              <div className="flex justify-end pt-4 border-t">
-                <Button onClick={handleSaveSystemSettings} leftIcon={<Save className="h-4 w-4" />}>
-                  Save System Settings
-                </Button>
+            ) : (
+              <div className="space-y-4">
+                {currentSession && currentTerm && (
+                  <Alert variant="info">
+                    <strong>Current:</strong> {currentSession.sessionName} - {currentTerm.termName}
+                  </Alert>
+                )}
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Select
+                    label="Current Academic Session"
+                    options={sessionOptions}
+                    value={systemSettings.current_session}
+                    onChange={(value) => handleSystemSettingChange('current_session', value)}
+                    placeholder="Select session"
+                  />
+                  <Select
+                    label="Current Term"
+                    options={termOptions}
+                    value={systemSettings.current_term}
+                    onChange={(value) => handleSystemSettingChange('current_term', value)}
+                    placeholder="Select term"
+                    disabled={!systemSettings.current_session}
+                  />
+                </div>
+                
+                <div className="flex justify-end pt-4 border-t">
+                  <Button 
+                    onClick={handleSaveSystemSettings} 
+                    leftIcon={<Save className="h-4 w-4" />}
+                    disabled={isLoadingSystem || !systemSettings.current_session || !systemSettings.current_term}
+                  >
+                    {isLoadingSystem ? 'Saving...' : 'Save System Settings'}
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       )}
-
-      {/* App Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Application Information</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-3 bg-secondary-50 rounded-lg">
-              <p className="text-sm text-secondary-500">Version</p>
-              <p className="font-medium text-secondary-900">1.0.0</p>
-            </div>
-            <div className="p-3 bg-secondary-50 rounded-lg">
-              <p className="text-sm text-secondary-500">Last Updated</p>
-              <p className="font-medium text-secondary-900">January 2026</p>
-            </div>
-            <div className="p-3 bg-secondary-50 rounded-lg">
-              <p className="text-sm text-secondary-500">Environment</p>
-              <p className="font-medium text-secondary-900">Development</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 };

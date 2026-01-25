@@ -12,91 +12,151 @@ import {
   Alert,
   Spinner,
 } from '../../components/common';
-import {
-  mockStudents,
-  mockClasses,
-  mockSubjects,
-  mockTeacherSubjectAssignments,
-  generateMockResultsForClassSubject,
-  getClassDisplayName,
-} from '../../utils/mockData';
 import { getFullName, calculateGrade } from '../../utils/helpers';
-import { CURRENT_SESSION, CURRENT_TERM, ASSESSMENT_TYPES } from '../../utils/constants';
+import { ASSESSMENT_TYPES } from '../../utils/constants';
 import { Save, AlertCircle, CheckCircle, Search, Edit } from 'lucide-react';
 import type { SubjectScoreEntry } from './results.types';
+import { useCurrentSession, useCurrentTerm } from '../../hooks/useSessionTerm';
+import { useTeacherAssignmentsQuery } from '../../hooks/useTeachers';
+import { useClassStudentsQuery } from '../../hooks/useClasses';
+import { useBulkSubjectScoresMutation, useSubjectResultsQuery } from '../../hooks/useResults';
+import { useAuth } from '../../hooks/useAuth';
+import type { Student, Class, Subject } from '../../types';
+
+// Helper to get class display name
+const getClassDisplayName = (classItem: Class | { className?: string; class_name?: string; arm?: string }) => {
+  const name = classItem.className || (classItem as any).class_name || '';
+  const arm = classItem.arm || '';
+  return `${name} ${arm}`.trim();
+};
 
 const SubjectTeacherScoreEntry: React.FC = () => {
+  // Fetch current session/term from backend
+  const { data: currentSession } = useCurrentSession();
+  const { data: currentTerm } = useCurrentTerm();
+  const { user } = useAuth();
+  
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [scores, setScores] = useState<{ [key: string]: { [assessment: string]: number } }>({});
   const [savedScores, setSavedScores] = useState<Set<string>>(new Set());
-  const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
 
-  // Get available classes for the current teacher (mock - get from auth context in real app)
-  const teacherId = 1; // Mock teacher ID
+  // Get teacher ID from user context
+  const teacherId = user?.teacherId || 1;
+
+  // Fetch teacher's assignments from API
+  const { data: assignmentsData, isLoading: isLoadingAssignments } = useTeacherAssignmentsQuery(
+    teacherId,
+    { enabled: !!teacherId }
+  );
+
+  // Process assignments to get available classes and subjects
   const availableAssignments = useMemo(() => {
-    return mockTeacherSubjectAssignments.filter((a) => a.teacher_id === teacherId);
-  }, [teacherId]);
+    if (!assignmentsData) return [];
+    const data = assignmentsData.data || assignmentsData || [];
+    return Array.isArray(data) ? data : [];
+  }, [assignmentsData]);
 
   const availableClasses = useMemo(() => {
-    const classIds = [...new Set(availableAssignments.map((a) => a.class_id))];
-    return mockClasses.filter((c) => classIds.includes(c.id));
+    const classMap = new Map();
+    availableAssignments.forEach((a: any) => {
+      const cls = a.class || a.classEntity;
+      if (cls && !classMap.has(cls.id)) {
+        classMap.set(cls.id, cls);
+      }
+    });
+    return Array.from(classMap.values());
   }, [availableAssignments]);
 
   const availableSubjects = useMemo(() => {
     if (!selectedClass) return [];
     const classId = parseInt(selectedClass);
-    const assignments = availableAssignments.filter((a) => a.class_id === classId);
-    const subjectIds = [...new Set(assignments.map((a) => a.subject_id))];
-    return mockSubjects.filter((s) => subjectIds.includes(s.id));
+    const subjectMap = new Map();
+    availableAssignments
+      .filter((a: any) => {
+        const cls = a.class || a.classEntity;
+        return cls && cls.id === classId;
+      })
+      .forEach((a: any) => {
+        const subj = a.subject;
+        if (subj && !subjectMap.has(subj.id)) {
+          subjectMap.set(subj.id, subj);
+        }
+      });
+    return Array.from(subjectMap.values());
   }, [selectedClass, availableAssignments]);
 
-  // Get students in selected class
+  // Fetch students in selected class
+  const { data: studentsData, isLoading: isLoadingStudents } = useClassStudentsQuery(
+    parseInt(selectedClass) || 0,
+    { enabled: !!selectedClass }
+  );
+
   const classStudents = useMemo(() => {
-    if (!selectedClass) return [];
-    const classId = parseInt(selectedClass);
-    return mockStudents
-      .filter((s) => s.current_class_id === classId && s.status === 'Active')
-      .sort((a, b) => getFullName(a.first_name, a.last_name).localeCompare(getFullName(b.first_name, b.last_name)));
-  }, [selectedClass]);
+    if (!studentsData) return [];
+    const students = studentsData.data || studentsData || [];
+    return students
+      .filter((s: Student) => s.status === 'Active')
+      .sort((a: Student, b: Student) => {
+        const nameA = getFullName(a.firstName || a.first_name, a.lastName || a.last_name);
+        const nameB = getFullName(b.firstName || b.first_name, b.lastName || b.last_name);
+        return nameA.localeCompare(nameB);
+      });
+  }, [studentsData]);
+
+  // Fetch existing results for selected class/subject
+  const { data: existingResultsData } = useSubjectResultsQuery(
+    {
+      classId: parseInt(selectedClass) || 0,
+      subjectId: parseInt(selectedSubject) || 0,
+      termId: currentTerm?.id,
+      sessionId: currentSession?.id,
+    },
+    { enabled: !!selectedClass && !!selectedSubject && !!currentTerm && !!currentSession }
+  );
+
+  // Bulk save mutation
+  const bulkSaveMutation = useBulkSubjectScoresMutation();
 
   // Filter students by search
   const filteredStudents = useMemo(() => {
-    return classStudents.filter((student) => {
-      const fullName = getFullName(student.first_name, student.last_name);
+    return classStudents.filter((student: Student) => {
+      const fullName = getFullName(student.firstName || student.first_name, student.lastName || student.last_name);
+      const admissionNo = student.admissionNo || student.admission_no || '';
       return (
         !searchQuery ||
         fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.admission_no.toLowerCase().includes(searchQuery.toLowerCase())
+        admissionNo.toLowerCase().includes(searchQuery.toLowerCase())
       );
     });
   }, [classStudents, searchQuery]);
 
   // Load existing scores when class and subject change
   useEffect(() => {
-    if (selectedClass && selectedSubject) {
-      const classId = parseInt(selectedClass);
-      const subjectId = parseInt(selectedSubject);
-      const existingResults = generateMockResultsForClassSubject(classId, subjectId);
-
+    if (selectedClass && selectedSubject && existingResultsData) {
+      const results = existingResultsData.data || existingResultsData || [];
       const newScores: { [key: string]: { [assessment: string]: number } } = {};
       const saved = new Set<string>();
 
-      classStudents.forEach((student) => {
+      classStudents.forEach((student: Student) => {
         const studentKey = `student_${student.id}`;
         newScores[studentKey] = {};
 
-        const studentResults = existingResults.filter((r) => r.student_id === student.id);
-        studentResults.forEach((result) => {
+        const studentResults = results.filter((r: any) => 
+          (r.student_id || r.studentId) === student.id
+        );
+        
+        studentResults.forEach((result: any) => {
+          const assessmentId = result.assessment_id || result.assessmentId;
           const assessmentName =
-            result.assessment_id === 1
+            assessmentId === 1
               ? 'test1'
-              : result.assessment_id === 2
+              : assessmentId === 2
               ? 'test2'
-              : result.assessment_id === 3
+              : assessmentId === 3
               ? 'test3'
               : 'exam';
           newScores[studentKey][assessmentName] = result.score;
@@ -107,7 +167,7 @@ const SubjectTeacherScoreEntry: React.FC = () => {
       setScores(newScores);
       setSavedScores(saved);
     }
-  }, [selectedClass, selectedSubject, classStudents]);
+  }, [selectedClass, selectedSubject, existingResultsData, classStudents]);
 
   const handleScoreChange = (studentId: number, assessment: string, value: string) => {
     const numValue = parseFloat(value) || 0;
@@ -146,15 +206,32 @@ const SubjectTeacherScoreEntry: React.FC = () => {
   };
 
   const handleSaveAll = async () => {
-    if (!selectedClass || !selectedSubject) return;
+    if (!selectedClass || !selectedSubject || !currentSession || !currentTerm) return;
 
-    setIsSaving(true);
     setSaveError('');
     setSaveSuccess(false);
 
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Build scores array for API
+      const scoresArray = Object.entries(scores).map(([studentKey, studentScores]) => {
+        const studentId = parseInt(studentKey.replace('student_', ''));
+        return {
+          student_id: studentId,
+          test1: studentScores.test1,
+          test2: studentScores.test2,
+          test3: studentScores.test3,
+          exam: studentScores.exam,
+        };
+      }).filter(s => s.test1 !== undefined || s.test2 !== undefined || s.test3 !== undefined || s.exam !== undefined);
+
+      await bulkSaveMutation.mutateAsync({
+        class_id: parseInt(selectedClass),
+        subject_id: parseInt(selectedSubject),
+        teacher_id: teacherId,
+        session_id: currentSession.id,
+        term_id: currentTerm.id,
+        scores: scoresArray,
+      });
 
       // Mark all scores as saved
       const allScoreKeys = new Set<string>();
@@ -170,8 +247,6 @@ const SubjectTeacherScoreEntry: React.FC = () => {
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
       setSaveError('Failed to save scores. Please try again.');
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -274,21 +349,40 @@ const SubjectTeacherScoreEntry: React.FC = () => {
     },
   ];
 
-  const tableData: SubjectScoreEntry[] = filteredStudents.map((student) => ({
+  const tableData: SubjectScoreEntry[] = filteredStudents.map((student: Student) => ({
     student_id: student.id,
-    student_name: getFullName(student.first_name, student.last_name),
-    admission_no: student.admission_no,
+    student_name: getFullName(student.firstName || student.first_name, student.lastName || student.last_name),
+    admission_no: student.admissionNo || student.admission_no || '',
     saved: false,
   }));
 
   const unsavedCount = getUnsavedCount();
+  const isSaving = bulkSaveMutation.isPending;
+  const isLoading = isLoadingAssignments || isLoadingStudents;
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-secondary-900">Subject Teacher Score Entry</h1>
-        <p className="text-secondary-500 mt-1">Enter grades for students in your assigned subjects</p>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-secondary-900">Subject Teacher Score Entry</h1>
+          <p className="text-secondary-500 mt-1">Enter grades for students in your assigned subjects</p>
+        </div>
+        <div className="flex items-center gap-4 bg-primary-50 rounded-lg px-4 py-3">
+          <div className="text-sm">
+            <p className="text-secondary-600">Session</p>
+            <p className="font-semibold text-secondary-900">
+              {currentSession?.sessionName || 'Loading...'}
+            </p>
+          </div>
+          <div className="w-px h-8 bg-secondary-300" />
+          <div className="text-sm">
+            <p className="text-secondary-600">Term</p>
+            <p className="font-semibold text-secondary-900">
+              {currentTerm?.termName || 'Loading...'}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Filters Card */}
@@ -299,13 +393,16 @@ const SubjectTeacherScoreEntry: React.FC = () => {
               <label className="block text-sm font-medium text-secondary-700 mb-2">Select Class</label>
               <Select
                 value={selectedClass}
-                onChange={(e) => {
-                  setSelectedClass(e.target.value);
+                onChange={(value) => {
+                  setSelectedClass(value);
                   setSelectedSubject('');
                 }}
                 options={[
                   { value: '', label: 'Choose a class...' },
-                  ...availableClasses.map((c) => ({ value: c.id.toString(), label: getClassDisplayName(c) })),
+                  ...availableClasses.map((c: Class) => ({ 
+                    value: c.id.toString(), 
+                    label: getClassDisplayName(c) 
+                  })),
                 ]}
               />
             </div>
@@ -314,10 +411,13 @@ const SubjectTeacherScoreEntry: React.FC = () => {
               <label className="block text-sm font-medium text-secondary-700 mb-2">Select Subject</label>
               <Select
                 value={selectedSubject}
-                onChange={(e) => setSelectedSubject(e.target.value)}
+                onChange={(value) => setSelectedSubject(value)}
                 options={[
                   { value: '', label: 'Choose a subject...' },
-                  ...availableSubjects.map((s) => ({ value: s.id.toString(), label: s.subject_name })),
+                  ...availableSubjects.map((s: Subject) => ({ 
+                    value: s.id.toString(), 
+                    label: s.subjectName || s.subject_name || '' 
+                  })),
                 ]}
                 disabled={!selectedClass}
               />
@@ -328,7 +428,7 @@ const SubjectTeacherScoreEntry: React.FC = () => {
             <div className="mt-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Badge variant="primary">
-                  {CURRENT_SESSION} - Term {CURRENT_TERM}
+                  {currentSession?.sessionName || 'Loading...'} - {currentTerm?.termName || 'Loading...'}
                 </Badge>
                 <Badge variant="secondary">{classStudents.length} Students</Badge>
               </div>
@@ -346,7 +446,7 @@ const SubjectTeacherScoreEntry: React.FC = () => {
       )}
 
       {saveError && (
-        <Alert variant="danger">
+        <Alert variant="error">
           <AlertCircle className="h-4 w-4" />
           <span>{saveError}</span>
         </Alert>
@@ -412,9 +512,12 @@ const SubjectTeacherScoreEntry: React.FC = () => {
               </div>
             </Alert>
 
-            {/* Table */}
             <div className="overflow-x-auto">
-              <Table columns={columns} data={tableData} />
+              <Table
+                columns={columns}
+                data={tableData}
+                keyExtractor={(item) => item.student_id}
+              />
             </div>
 
             {filteredStudents.length === 0 && (

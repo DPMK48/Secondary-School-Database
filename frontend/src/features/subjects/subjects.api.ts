@@ -5,12 +5,12 @@ export interface SubjectFilters {
   level?: 'Junior' | 'Senior';
   search?: string;
   page?: number;
-  per_page?: number;
+  perPage?: number;
 }
 
 export interface CreateSubjectData {
-  subject_name: string;
-  subject_code: string;
+  subjectName: string;
+  subjectCode: string;
   level?: 'Junior' | 'Senior';
 }
 
@@ -20,32 +20,57 @@ export const subjectsApi = {
   /**
    * Get all subjects with optional filters
    */
-  getAll: (filters?: SubjectFilters) =>
-    api.get<PaginatedResponse<Subject>>('/subjects', { params: filters }),
+  getAll: async (filters?: SubjectFilters) => {
+    // Clean up filters - remove empty/undefined values
+    const params: any = {};
+    if (filters?.level && filters.level !== '') {
+      params.level = filters.level;
+    }
+    if (filters?.search && filters.search.trim() !== '') {
+      params.search = filters.search;
+    }
+    if (filters?.page) {
+      params.page = filters.page;
+    }
+    if (filters?.perPage) {
+      params.perPage = filters.perPage;
+    }
+    
+    const response = await api.get<any>('/subjects', { params });
+    return response.data;
+  },
 
   /**
    * Get single subject by ID
    */
-  getById: (id: number) =>
-    api.get<ApiResponse<Subject>>(`/subjects/${id}`),
+  getById: async (id: number) => {
+    const response = await api.get<any>(`/subjects/${id}`);
+    return response.data;
+  },
 
   /**
    * Create new subject
    */
-  create: (data: CreateSubjectData) =>
-    api.post<ApiResponse<Subject>>('/subjects', data),
+  create: async (data: CreateSubjectData) => {
+    const response = await api.post<any>('/subjects', data);
+    return response.data;
+  },
 
   /**
    * Update existing subject
    */
-  update: (id: number, data: UpdateSubjectData) =>
-    api.put<ApiResponse<Subject>>(`/subjects/${id}`, data),
+  update: async (id: number, data: UpdateSubjectData) => {
+    const response = await api.patch<any>(`/subjects/${id}`, data);
+    return response.data;
+  },
 
   /**
    * Delete subject
    */
-  delete: (id: number) =>
-    api.delete<ApiResponse<void>>(`/subjects/${id}`),
+  delete: async (id: number) => {
+    const response = await api.delete<any>(`/subjects/${id}`);
+    return response.data;
+  },
 
   /**
    * Get teachers teaching this subject

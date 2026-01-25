@@ -8,6 +8,8 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  originalUser: User | null; // Store original admin user when impersonating
+  isImpersonating: boolean;
 }
 
 const initialState: AuthState = {
@@ -16,6 +18,8 @@ const initialState: AuthState = {
   isAuthenticated: false,
   isLoading: false,
   error: null,
+  originalUser: null,
+  isImpersonating: false,
 };
 
 const authSlice = createSlice({
@@ -47,10 +51,13 @@ const authSlice = createSlice({
       state.token = null;
       state.isAuthenticated = false;
       state.error = null;
+      state.originalUser = null;
+      state.isImpersonating = false;
       
       // Clear localStorage
       localStorage.removeItem(STORAGE_KEYS.TOKEN);
       localStorage.removeItem(STORAGE_KEYS.USER);
+      localStorage.removeItem(STORAGE_KEYS.ORIGINAL_USER);
     },
     setUser: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
@@ -64,6 +71,27 @@ const authSlice = createSlice({
       state.token = action.payload;
       localStorage.setItem(STORAGE_KEYS.TOKEN, action.payload);
     },
+    impersonate: (state, action: PayloadAction<User>) => {
+      // Store original admin user
+      if (!state.isImpersonating && state.user) {
+        state.originalUser = state.user;
+        localStorage.setItem(STORAGE_KEYS.ORIGINAL_USER, JSON.stringify(state.user));
+      }
+      // Switch to impersonated user
+      state.user = action.payload;
+      state.isImpersonating = true;
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(action.payload));
+    },
+    exitImpersonation: (state) => {
+      // Restore original admin user
+      if (state.originalUser) {
+        state.user = state.originalUser;
+        state.originalUser = null;
+        state.isImpersonating = false;
+        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(state.user));
+        localStorage.removeItem(STORAGE_KEYS.ORIGINAL_USER);
+      }
+    },
   },
 });
 
@@ -75,6 +103,8 @@ export const {
   setUser,
   clearError,
   refreshToken,
+  impersonate,
+  exitImpersonation,
 } = authSlice.actions;
 
 export default authSlice.reducer;
@@ -85,3 +115,5 @@ export const selectUser = (state: { auth: AuthState }) => state.auth.user;
 export const selectIsAuthenticated = (state: { auth: AuthState }) => state.auth.isAuthenticated;
 export const selectIsLoading = (state: { auth: AuthState }) => state.auth.isLoading;
 export const selectError = (state: { auth: AuthState }) => state.auth.error;
+export const selectIsImpersonating = (state: { auth: AuthState }) => state.auth.isImpersonating;
+export const selectOriginalUser = (state: { auth: AuthState }) => state.auth.originalUser;

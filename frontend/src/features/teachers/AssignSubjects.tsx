@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Card,
   Button, 
@@ -8,42 +8,109 @@ import {
   Badge,
   Modal
 } from '../../components/common';
-import { mockTeachers, mockSubjects, mockClasses, getClassDisplayName } from '../../utils/mockData';
-import { getFullName } from '../../utils/helpers';
-import type { Teacher, Subject, Class, TeacherSubjectClass } from '../../types';
-import { Plus, Trash2, Check, X } from 'lucide-react';
+import { Plus, Trash2, Check, X, ArrowLeft } from 'lucide-react';
+import { 
+  useTeacherQuery, 
+  useTeacherAssignmentsQuery,
+  useAssignSubjectClassMutation,
+  useUnassignSubjectClassMutation 
+} from '../../hooks/useTeachers';
+import { useSubjectsQuery } from '../../hooks/useSubjects';
+import { useClassesQuery } from '../../hooks/useClasses';
 
 const AssignSubjects: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const teacherId = parseInt(id || '0');
   
-  const [teacher, setTeacher] = useState<Teacher | null>(null);
-  const [assignments, setAssignments] = useState<TeacherSubjectClass[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [classes, setClasses] = useState<Class[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [selectedAssignment, setSelectedAssignment] = useState<TeacherSubjectClass | null>(null);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<number | null>(null);
   
   // Form state
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      const foundTeacher = mockTeachers.find((t) => t.id === parseInt(id || '0'));
-      setTeacher(foundTeacher || null);
-      setSubjects(mockSubjects);
-      setClasses(mockClasses);
-      // Mock assignments - in real app, fetch from teachersApi.getSubjects(id)
-      setAssignments([]);
-      setLoading(false);
-    }, 500);
-  }, [id]);
+  // Fetch teacher data
+  const { data: teacherResponse, isLoading: teacherLoading } = useTeacherQuery(teacherId, {
+    enabled: !!teacherId,
+  });
+
+  // Fetch teacher's assignments
+  const { data: assignmentsResponse, isLoading: assignmentsLoading, refetch: refetchAssignments } = useTeacherAssignmentsQuery(teacherId, {
+    enabled: !!teacherId,
+  });
+
+  // Fetch all subjects
+  const { data: subjectsResponse, isLoading: subjectsLoading } = useSubjectsQuery({ perPage: 100 });
+
+  // Fetch all classes
+  const { data: classesResponse, isLoading: classesLoading } = useClassesQuery({ perPage: 100 });
+
+  // Mutations
+  const assignMutation = useAssignSubjectClassMutation();
+  const unassignMutation = useUnassignSubjectClassMutation();
+
+  // Normalize teacher data
+  const teacher = useMemo(() => {
+    const data = teacherResponse?.data;
+    if (!data) return null;
+    return {
+      id: data.id,
+      firstName: data.firstName || data.first_name,
+      lastName: data.lastName || data.last_name,
+      email: data.email,
+    };
+  }, [teacherResponse]);
+
+  // Normalize assignments
+  const assignments = useMemo(() => {
+    const data = assignmentsResponse?.data;
+    if (!data || !Array.isArray(data)) return [];
+    return data.map((a: any) => ({
+      id: a.id,
+      subject: a.subject ? {
+        id: a.subject.id,
+        subjectName: a.subject.subjectName || a.subject.subject_name,
+        subjectCode: a.subject.subjectCode || a.subject.subject_code,
+      } : null,
+      class: a.class ? {
+        id: a.class.id,
+        className: a.class.className || a.class.class_name,
+        arm: a.class.arm,
+        level: a.class.level,
+      } : null,
+    }));
+  }, [assignmentsResponse]);
+
+  // Normalize subjects
+  const subjects = useMemo(() => {
+    const data = subjectsResponse?.data;
+    if (!data || !Array.isArray(data)) return [];
+    return data.map((s: any) => ({
+      id: s.id,
+      subjectName: s.subjectName || s.subject_name,
+      subjectCode: s.subjectCode || s.subject_code,
+    }));
+  }, [subjectsResponse]);
+
+  // Normalize classes
+  const classes = useMemo(() => {
+    const data = classesResponse?.data;
+    if (!data || !Array.isArray(data)) return [];
+    return data.map((c: any) => ({
+      id: c.id,
+      className: c.className || c.class_name,
+      arm: c.arm,
+      level: c.level,
+    }));
+  }, [classesResponse]);
+
+  const getClassDisplayName = (cls: { className: string; arm: string }) => {
+    return `${cls.className} ${cls.arm}`;
+  };
 
   const handleAddAssignment = async () => {
     if (!selectedSubject || !selectedClass) {
@@ -51,78 +118,55 @@ const AssignSubjects: React.FC = () => {
       return;
     }
 
-    setSubmitting(true);
     setError('');
 
     try {
-      // TODO: Replace with actual API call
-      // await teachersApi.assignSubjectClass({
-      //   teacher_id: parseInt(id || '0'),
-      //   subject_id: parseInt(selectedSubject),
-      //   class_id: parseInt(selectedClass),
-      // });
+      await assignMutation.mutateAsync({
+        teacherId,
+        subjectId: parseInt(selectedSubject),
+        classId: parseInt(selectedClass),
+      });
 
-      // Mock success
-      setTimeout(() => {
-        const subject = subjects.find(s => s.id === parseInt(selectedSubject));
-        const classData = classes.find(c => c.id === parseInt(selectedClass));
-        
-        const newAssignment: TeacherSubjectClass = {
-          id: Date.now(),
-          teacher_id: parseInt(id || '0'),
-          subject_id: parseInt(selectedSubject),
-          class_id: parseInt(selectedClass),
-          subject,
-          class: classData,
-        };
+      setSuccess('Assignment added successfully');
+      setSelectedSubject('');
+      setSelectedClass('');
+      setShowAddModal(false);
+      refetchAssignments();
 
-        setAssignments([...assignments, newAssignment]);
-        setSuccess('Assignment added successfully');
-        setSelectedSubject('');
-        setSelectedClass('');
-        setShowAddModal(false);
-        setSubmitting(false);
-
-        setTimeout(() => setSuccess(''), 3000);
-      }, 500);
-    } catch (err) {
-      setError('Failed to add assignment');
-      setSubmitting(false);
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to add assignment');
     }
   };
 
   const handleDeleteAssignment = async () => {
-    if (!selectedAssignment) return;
+    if (!selectedAssignmentId) return;
 
-    setSubmitting(true);
     setError('');
 
     try {
-      // TODO: Replace with actual API call
-      // await teachersApi.removeAssignment(selectedAssignment.id);
+      await unassignMutation.mutateAsync(selectedAssignmentId);
+      setSuccess('Assignment removed successfully');
+      setShowDeleteModal(false);
+      setSelectedAssignmentId(null);
+      refetchAssignments();
 
-      // Mock success
-      setTimeout(() => {
-        setAssignments(assignments.filter(a => a.id !== selectedAssignment.id));
-        setSuccess('Assignment removed successfully');
-        setShowDeleteModal(false);
-        setSelectedAssignment(null);
-        setSubmitting(false);
-
-        setTimeout(() => setSuccess(''), 3000);
-      }, 500);
-    } catch (err) {
-      setError('Failed to remove assignment');
-      setSubmitting(false);
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to remove assignment');
     }
   };
 
-  const openDeleteModal = (assignment: TeacherSubjectClass) => {
-    setSelectedAssignment(assignment);
+  const openDeleteModal = (assignmentId: number) => {
+    setSelectedAssignmentId(assignmentId);
     setShowDeleteModal(true);
   };
 
-  if (loading) {
+  const selectedAssignment = assignments.find(a => a.id === selectedAssignmentId);
+
+  const isLoading = teacherLoading || assignmentsLoading || subjectsLoading || classesLoading;
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Spinner size="lg" />
@@ -142,11 +186,17 @@ const AssignSubjects: React.FC = () => {
     <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Assign Subjects & Classes</h1>
-          <p className="text-gray-600 mt-1">
-            Teacher: <strong>{getFullName(teacher.first_name, teacher.last_name)}</strong>
-          </p>
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Assign Subjects & Classes</h1>
+            <p className="text-gray-600 mt-1">
+              Teacher: <strong>{teacher.firstName} {teacher.lastName}</strong>
+            </p>
+          </div>
         </div>
         <Button onClick={() => setShowAddModal(true)}>
           <Plus className="w-4 h-4 mr-2" />
@@ -156,7 +206,7 @@ const AssignSubjects: React.FC = () => {
 
       {/* Alerts */}
       {success && <Alert variant="success">{success}</Alert>}
-      {error && <Alert variant="error">{error}</Alert>}
+      {error && <Alert variant="error" onClose={() => setError('')}>{error}</Alert>}
 
       {/* Assignments Table */}
       <Card>
@@ -187,11 +237,11 @@ const AssignSubjects: React.FC = () => {
                     <tr key={assignment.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm">{index + 1}</td>
                       <td className="px-4 py-3 text-sm font-semibold">
-                        {assignment.subject?.subject_name}
+                        {assignment.subject?.subjectName}
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant="secondary">
-                          {assignment.subject?.subject_code}
+                          {assignment.subject?.subjectCode}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-sm">
@@ -206,7 +256,7 @@ const AssignSubjects: React.FC = () => {
                         <Button
                           variant="danger"
                           size="sm"
-                          onClick={() => openDeleteModal(assignment)}
+                          onClick={() => openDeleteModal(assignment.id)}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -223,7 +273,7 @@ const AssignSubjects: React.FC = () => {
       {/* Add Assignment Modal */}
       <Modal 
         isOpen={showAddModal} 
-        onClose={() => !submitting && setShowAddModal(false)}
+        onClose={() => !assignMutation.isPending && setShowAddModal(false)}
         title="Add New Assignment"
         size="md"
         footer={
@@ -231,18 +281,18 @@ const AssignSubjects: React.FC = () => {
             <Button
               variant="outline"
               onClick={() => setShowAddModal(false)}
-              disabled={submitting}
+              disabled={assignMutation.isPending}
             >
               <X className="w-4 h-4 mr-2" />
               Cancel
             </Button>
-            <Button onClick={handleAddAssignment} disabled={submitting}>
-              {submitting ? (
+            <Button onClick={handleAddAssignment} disabled={assignMutation.isPending}>
+              {assignMutation.isPending ? (
                 <Spinner size="sm" className="mr-2" />
               ) : (
                 <Check className="w-4 h-4 mr-2" />
               )}
-              {submitting ? 'Adding...' : 'Add Assignment'}
+              {assignMutation.isPending ? 'Adding...' : 'Add Assignment'}
             </Button>
           </>
         }
@@ -254,12 +304,12 @@ const AssignSubjects: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               value={selectedSubject}
               onChange={(e) => setSelectedSubject(e.target.value)}
-              disabled={submitting}
+              disabled={assignMutation.isPending}
             >
               <option value="">Select Subject</option>
               {subjects.map((subject) => (
                 <option key={subject.id} value={subject.id}>
-                  {subject.subject_name} ({subject.subject_code})
+                  {subject.subjectName} ({subject.subjectCode})
                 </option>
               ))}
             </select>
@@ -271,25 +321,23 @@ const AssignSubjects: React.FC = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               value={selectedClass}
               onChange={(e) => setSelectedClass(e.target.value)}
-              disabled={submitting}
+              disabled={assignMutation.isPending}
             >
               <option value="">Select Class</option>
               {classes.map((cls) => (
                 <option key={cls.id} value={cls.id}>
-                  {getClassDisplayName(cls)}
+                  {getClassDisplayName(cls)} ({cls.level})
                 </option>
               ))}
             </select>
           </div>
-
-          {error && <Alert variant="error">{error}</Alert>}
         </div>
       </Modal>
 
       {/* Delete Confirmation Modal */}
       <Modal 
         isOpen={showDeleteModal} 
-        onClose={() => !submitting && setShowDeleteModal(false)}
+        onClose={() => !unassignMutation.isPending && setShowDeleteModal(false)}
         title="Remove Assignment"
         size="sm"
         footer={
@@ -297,20 +345,20 @@ const AssignSubjects: React.FC = () => {
             <Button
               variant="outline"
               onClick={() => setShowDeleteModal(false)}
-              disabled={submitting}
+              disabled={unassignMutation.isPending}
             >
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleDeleteAssignment} disabled={submitting}>
-              {submitting ? <Spinner size="sm" className="mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
-              {submitting ? 'Removing...' : 'Remove'}
+            <Button variant="danger" onClick={handleDeleteAssignment} disabled={unassignMutation.isPending}>
+              {unassignMutation.isPending ? <Spinner size="sm" className="mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              {unassignMutation.isPending ? 'Removing...' : 'Remove'}
             </Button>
           </>
         }
       >
         <p className="text-gray-600">
           Are you sure you want to remove the assignment for{' '}
-          <strong>{selectedAssignment?.subject?.subject_name}</strong> in{' '}
+          <strong>{selectedAssignment?.subject?.subjectName}</strong> in{' '}
           <strong>{selectedAssignment?.class && getClassDisplayName(selectedAssignment.class)}</strong>?
         </p>
       </Modal>

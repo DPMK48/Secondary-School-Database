@@ -1,66 +1,51 @@
-import React, { useState } from 'react';
-import { Bell, X, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Bell, X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import { cn } from '../../utils/helpers';
-import { formatDate } from '../../utils/helpers';
-
-interface Notification {
-  id: number;
-  type: 'success' | 'warning' | 'info';
-  title: string;
-  message: string;
-  time: string;
-  read: boolean;
-}
-
-const mockNotifications: Notification[] = [
-  {
-    id: 1,
-    type: 'success',
-    title: 'Results Approved',
-    message: 'SS2 A results have been approved and published',
-    time: '2 hours ago',
-    read: false,
-  },
-  {
-    id: 2,
-    type: 'info',
-    title: 'New Student Enrolled',
-    message: '3 new students have been added to SS1 B',
-    time: '5 hours ago',
-    read: false,
-  },
-  {
-    id: 3,
-    type: 'warning',
-    title: 'Pending Scores',
-    message: 'Mathematics scores for SS3 are pending approval',
-    time: '1 day ago',
-    read: true,
-  },
-  {
-    id: 4,
-    type: 'info',
-    title: 'Attendance Marked',
-    message: 'Daily attendance has been successfully recorded',
-    time: '2 days ago',
-    read: true,
-  },
-];
+import { notificationsApi, type Notification } from '../../services/notifications.service';
 
 const NotificationDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const handleMarkAsRead = (id: number) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+  useEffect(() => {
+    if (isOpen && notifications.length === 0) {
+      loadNotifications();
+    }
+  }, [isOpen]);
+
+  const loadNotifications = async () => {
+    try {
+      setIsLoading(true);
+      const data = await notificationsApi.getNotifications(10);
+      setNotifications(data);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleMarkAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      await notificationsApi.markAsRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      );
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await notificationsApi.markAllAsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch (error) {
+      console.error('Error marking all as read:', error);
+    }
   };
 
   const getIcon = (type: Notification['type']) => {
@@ -68,9 +53,30 @@ const NotificationDropdown: React.FC = () => {
       case 'success':
         return <CheckCircle className="h-5 w-5 text-green-500" />;
       case 'warning':
-        return <AlertCircle className="h-5 w-5 text-yellow-500" />;
+        return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
+      case 'error':
+        return <AlertCircle className="h-5 w-5 text-red-500" />;
       case 'info':
         return <Info className="h-5 w-5 text-blue-500" />;
+    }
+  };
+
+  const formatTime = (timestamp: string) => {
+    try {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diffInMs = now.getTime() - date.getTime();
+      const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+      const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+      const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+      if (diffInMinutes < 1) return 'Just now';
+      if (diffInMinutes < 60) return `${diffInMinutes} minute${diffInMinutes > 1 ? 's' : ''} ago`;
+      if (diffInHours < 24) return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
+      if (diffInDays < 7) return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+      return date.toLocaleDateString();
+    } catch {
+      return timestamp;
     }
   };
 

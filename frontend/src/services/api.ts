@@ -47,7 +47,7 @@ export const dashboardApi = {
 
 // Students API
 export const studentsApi = {
-  getAll: (params?: { page?: number; per_page?: number; search?: string; class_id?: number }) =>
+  getAll: (params?: { page?: number; perPage?: number; search?: string; class_id?: number }) =>
     get<PaginatedResponse<Student>>('/students', params),
   getById: (id: number) => get<Student>(`/students/${id}`),
   create: (data: Partial<Student>) => post<Student>('/students', data),
@@ -58,7 +58,7 @@ export const studentsApi = {
 
 // Teachers API
 export const teachersApi = {
-  getAll: (params?: { page?: number; per_page?: number; search?: string }) =>
+  getAll: (params?: { page?: number; perPage?: number; search?: string }) =>
     get<PaginatedResponse<Teacher>>('/teachers', params),
   getById: (id: number) => get<Teacher>(`/teachers/${id}`),
   create: (data: Partial<Teacher>) => post<Teacher>('/teachers', data),
@@ -69,7 +69,7 @@ export const teachersApi = {
 
 // Classes API
 export const classesApi = {
-  getAll: (params?: { page?: number; per_page?: number; level?: string }) =>
+  getAll: (params?: { page?: number; perPage?: number; level?: string }) =>
     get<PaginatedResponse<Class>>('/classes', params),
   getById: (id: number) => get<Class>(`/classes/${id}`),
   create: (data: Partial<Class>) => post<Class>('/classes', data),
@@ -81,7 +81,7 @@ export const classesApi = {
 
 // Subjects API
 export const subjectsApi = {
-  getAll: (params?: { page?: number; per_page?: number; search?: string }) =>
+  getAll: (params?: { page?: number; perPage?: number; search?: string }) =>
     get<PaginatedResponse<Subject>>('/subjects', params),
   getById: (id: number) => get<Subject>(`/subjects/${id}`),
   create: (data: Partial<Subject>) => post<Subject>('/subjects', data),

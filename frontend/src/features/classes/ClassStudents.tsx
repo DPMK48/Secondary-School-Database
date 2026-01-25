@@ -13,16 +13,10 @@ import {
   Badge,
   Modal,
   Select,
+  Spinner,
+  Alert,
 } from '../../components/common';
-import {
-  mockClasses,
-  mockStudents,
-  mockFormTeachers,
-  mockTeachers,
-  mockSubjects,
-  mockTeacherSubjectAssignments,
-  getClassDisplayName,
-} from '../../utils/mockData';
+import { getClassDisplayName } from '../../utils/mockData';
 import { getFullName, calculateAge } from '../../utils/helpers';
 import {
   ArrowLeft,
@@ -36,6 +30,8 @@ import {
   Phone,
   Eye,
 } from 'lucide-react';
+import { useClassQuery, useClassStudentsQuery, useClassSubjectsQuery } from '../../hooks/useClasses';
+import type { Student } from '../../types';
 
 const ClassStudents: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -47,29 +43,96 @@ const ClassStudents: React.FC = () => {
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
 
   const classId = parseInt(id || '0');
-  const currentClass = mockClasses.find((c) => c.id === classId);
 
+  // Fetch class data from API
+  const { data: classResponse, isLoading: classLoading, error: classError } = useClassQuery(classId, {
+    enabled: !!classId,
+  });
+
+  // Fetch students in this class
+  const { data: studentsResponse, isLoading: studentsLoading, error: studentsError } = useClassStudentsQuery(classId, {
+    enabled: !!classId,
+  });
+
+  // Fetch subjects for this class
+  const { data: subjectsResponse, error: subjectsError } = useClassSubjectsQuery(classId, {
+    enabled: !!classId,
+  });
+
+  // Debug logging
+  console.log('🔍 ClassStudents Debug:', {
+    classId,
+    classResponse,
+    studentsResponse,
+    subjectsResponse,
+    classError,
+    studentsError,
+    subjectsError,
+  });
+
+  // Get class data - normalize to handle both camelCase and snake_case
+  const currentClass = useMemo(() => {
+    const data = classResponse?.data;
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      className: data.className || data.class_name,
+      arm: data.arm,
+      level: data.level,
+    };
+  }, [classResponse]);
+
+  // Get form teacher from class data
   const formTeacher = useMemo(() => {
-    const ft = mockFormTeachers.find((f) => f.class_id === classId);
+    const data = classResponse?.data;
+    if (!data) return null;
+
+    const ft = data.form_teacher || data.formTeacher;
     if (!ft) return null;
-    return mockTeachers.find((t) => t.id === ft.teacher_id);
-  }, [classId]);
+
+    return {
+      id: ft.id,
+      first_name: ft.first_name || ft.firstName,
+      last_name: ft.last_name || ft.lastName,
+      email: ft.email,
+      phone: ft.phone,
+    };
+  }, [classResponse]);
 
   // Get subjects taught in this class
   const classSubjects = useMemo(() => {
-    if (!currentClass) return [];
-    const assignments = mockTeacherSubjectAssignments.filter((a) => a.class_id === classId);
-    return assignments.map((a) => {
-      const subject = mockSubjects.find((s) => s.id === a.subject_id);
-      const teacher = mockTeachers.find((t) => t.id === a.teacher_id);
-      return { subject, teacher };
-    });
-  }, [classId, currentClass]);
+    const data = subjectsResponse?.data;
+    if (!data || !Array.isArray(data)) return [];
 
-  // Get students in this class
-  const classStudents = useMemo(() => {
-    return mockStudents.filter((s) => s.current_class_id === classId);
-  }, [classId]);
+    return data.map((item: any) => ({
+      subject: item.subject ? {
+        id: item.subject.id,
+        subject_name: item.subject.subjectName || item.subject.subject_name,
+      } : null,
+      teacher: item.teacher ? {
+        first_name: item.teacher.firstName || item.teacher.first_name,
+        last_name: item.teacher.lastName || item.teacher.last_name,
+      } : null,
+    }));
+  }, [subjectsResponse]);
+
+  // Get students in this class - normalize data
+  const classStudents: Student[] = useMemo(() => {
+    const data = studentsResponse?.data?.data || studentsResponse?.data;
+    if (!data || !Array.isArray(data)) return [];
+
+    return data.map((s: any) => ({
+      id: s.id,
+      admission_no: s.admission_no || s.admissionNo,
+      first_name: s.first_name || s.firstName,
+      last_name: s.last_name || s.lastName,
+      gender: s.gender,
+      date_of_birth: s.date_of_birth || s.dateOfBirth,
+      current_class_id: s.current_class_id || s.currentClassId,
+      status: s.status,
+    } as Student));
+  }, [studentsResponse]);
 
   // Filter students
   const filteredStudents = useMemo(() => {
@@ -78,7 +141,7 @@ const ClassStudents: React.FC = () => {
       const matchesSearch =
         !searchQuery ||
         fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.admission_no.toLowerCase().includes(searchQuery.toLowerCase());
+        (student.admission_no || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesGender = !genderFilter || student.gender === genderFilter;
       return matchesSearch && matchesGender;
     });
@@ -88,6 +151,25 @@ const ClassStudents: React.FC = () => {
     { value: 'Male', label: 'Male' },
     { value: 'Female', label: 'Female' },
   ];
+
+  if (classLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (classError) {
+    return (
+      <div className="space-y-4">
+        <Alert variant="error">Failed to load class details. Please try again.</Alert>
+        <Button variant="outline" onClick={() => navigate('/dashboard/classes')} className="mt-4">
+          Back to Classes
+        </Button>
+      </div>
+    );
+  }
 
   if (!currentClass) {
     return (
@@ -104,7 +186,7 @@ const ClassStudents: React.FC = () => {
     {
       key: 'student',
       label: 'Student',
-      render: (_value: unknown, row: (typeof mockStudents)[0]) => (
+      render: (_value: unknown, row: Student) => (
         <div className="flex items-center gap-3">
           <Avatar name={getFullName(row.first_name, row.last_name)} size="sm" />
           <div>
@@ -119,7 +201,7 @@ const ClassStudents: React.FC = () => {
     {
       key: 'gender',
       label: 'Gender',
-      render: (_value: unknown, row: (typeof mockStudents)[0]) => (
+      render: (_value: unknown, row: Student) => (
         <Badge variant={row.gender === 'Male' ? 'info' : 'secondary'} size="sm">
           {row.gender}
         </Badge>
@@ -128,14 +210,14 @@ const ClassStudents: React.FC = () => {
     {
       key: 'age',
       label: 'Age',
-      render: (_value: unknown, row: (typeof mockStudents)[0]) => (
-        <span>{calculateAge(row.date_of_birth)} years</span>
+      render: (_value: unknown, row: Student) => (
+        <span>{row.date_of_birth ? `${calculateAge(row.date_of_birth)} years` : 'N/A'}</span>
       ),
     },
     {
       key: 'status',
       label: 'Status',
-      render: (_value: unknown, row: (typeof mockStudents)[0]) => (
+      render: (_value: unknown, row: Student) => (
         <Badge variant={row.status === 'Active' ? 'success' : 'danger'} size="sm">
           {row.status}
         </Badge>
@@ -144,7 +226,7 @@ const ClassStudents: React.FC = () => {
     {
       key: 'actions',
       label: 'Actions',
-      render: (_value: unknown, row: (typeof mockStudents)[0]) =>
+      render: (_value: unknown, row: Student) =>
         canManageStudents ? (
           <Button
             variant="ghost"
@@ -236,60 +318,7 @@ const ClassStudents: React.FC = () => {
             )}
           </CardContent>
         </Card>
-
-        {/* Subjects */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <BookOpen className="h-4 w-4" />
-              Subjects ({classSubjects.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {classSubjects.slice(0, 6).map(({ subject }, index) =>
-                subject ? (
-                  <Badge key={index} variant="secondary" size="sm">
-                    {subject.subject_name}
-                  </Badge>
-                ) : null
-              )}
-              {classSubjects.length > 6 && (
-                <Badge variant="secondary" size="sm">
-                  +{classSubjects.length - 6} more
-                </Badge>
-              )}
-            </div>
-          </CardContent>
-        </Card>
       </div>
-
-      {/* Subject Teachers */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Subject Teachers</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {classSubjects.map(({ subject, teacher }, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-3 p-3 bg-secondary-50 rounded-lg"
-              >
-                <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
-                  <GraduationCap className="h-5 w-5 text-primary-600" />
-                </div>
-                <div>
-                  <p className="font-medium text-secondary-900">{subject?.subject_name}</p>
-                  <p className="text-xs text-secondary-500">
-                    {teacher ? getFullName(teacher.first_name, teacher.last_name) : 'Not assigned'}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Students Table */}
       <Card>
@@ -331,12 +360,41 @@ const ClassStudents: React.FC = () => {
             />
           </div>
 
-          <Table
-            columns={columns}
-            data={filteredStudents}
-            keyExtractor={(item) => item.id.toString()}
-            emptyMessage="No students found"
-          />
+          {studentsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Spinner size="md" />
+              <span className="ml-2 text-secondary-500">Loading students...</span>
+            </div>
+          ) : studentsError ? (
+            <div className="text-center py-12">
+              <Alert variant="error" className="mb-4">
+                Failed to load students. Please refresh the page.
+              </Alert>
+              <p className="text-sm text-secondary-500">Error: {(studentsError as any)?.message}</p>
+            </div>
+          ) : filteredStudents.length === 0 ? (
+            <div className="text-center py-12">
+              <Users className="h-12 w-12 mx-auto text-secondary-300 mb-4" />
+              <h3 className="text-lg font-medium text-secondary-900 mb-2">No students in this class</h3>
+              <p className="text-secondary-500 mb-4">
+                {searchQuery || genderFilter
+                  ? 'Try adjusting your search filters'
+                  : 'Add students to this class from the Students page'}
+              </p>
+              {canManageStudents && !searchQuery && !genderFilter && (
+                <Button onClick={() => navigate('/dashboard/students')}>
+                  Go to Students
+                </Button>
+              )}
+            </div>
+          ) : (
+            <Table
+              columns={columns}
+              data={filteredStudents}
+              keyExtractor={(item) => item.id.toString()}
+              emptyMessage="No students found in this class"
+            />
+          )}
         </CardContent>
       </Card>
 

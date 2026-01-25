@@ -11,20 +11,27 @@ import {
   Badge,
   Modal,
   Alert,
+  Spinner,
 } from '../../components/common';
-import {
-  mockStudents,
-  mockClasses,
-  mockSubjects,
-  mockTeacherSubjectAssignments,
-  generateMockResultsForClassSubject,
-  getClassDisplayName,
-} from '../../utils/mockData';
 import { getFullName } from '../../utils/helpers';
-import { CURRENT_SESSION, CURRENT_TERM, ASSESSMENT_TYPES } from '../../utils/constants';
+import { ASSESSMENT_TYPES } from '../../utils/constants';
 import { Save, Search, AlertCircle, CheckCircle } from 'lucide-react';
+import { useCurrentSession, useCurrentTerm } from '../../hooks/useSessionTerm';
+import { useClassesQuery, useClassStudentsQuery, useClassSubjectsQuery } from '../../hooks/useClasses';
+import { useBulkResultMutation, useSubjectResultsQuery } from '../../hooks/useResults';
+import type { Student, Class, Subject } from '../../types';
+
+// Helper to get class display name
+const getClassDisplayName = (classItem: Class | { className?: string; class_name?: string; arm?: string }) => {
+  const name = classItem.className || (classItem as any).class_name || '';
+  const arm = classItem.arm || '';
+  return `${name} ${arm}`.trim();
+};
 
 const ScoreEntry: React.FC = () => {
+  // Fetch current session/term from backend
+  const { data: currentSession } = useCurrentSession();
+  const { data: currentTerm } = useCurrentTerm();
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [assessmentType, setAssessmentType] = useState('');
@@ -32,86 +39,141 @@ const ScoreEntry: React.FC = () => {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [scores, setScores] = useState<{ [studentId: number]: number }>({});
 
-  // Get available classes for the current teacher
+  // Fetch classes from API
+  const { data: classesData, isLoading: isLoadingClasses } = useClassesQuery();
   const availableClasses = useMemo(() => {
-    // For demo, show all classes
-    return mockClasses;
-  }, []);
+    if (!classesData) return [];
+    // Handle both paginated and non-paginated responses
+    return Array.isArray(classesData) ? classesData : classesData.data || [];
+  }, [classesData]);
 
-  // Get subjects for selected class
+  // Fetch subjects for selected class
+  const { data: subjectsData, isLoading: isLoadingSubjects } = useClassSubjectsQuery(
+    parseInt(selectedClass) || 0,
+    { enabled: !!selectedClass }
+  );
   const availableSubjects = useMemo(() => {
-    if (!selectedClass) return [];
-    const classId = parseInt(selectedClass);
-    const assignments = mockTeacherSubjectAssignments.filter((a) => a.class_id === classId);
-    const subjectIds = [...new Set(assignments.map((a) => a.subject_id))];
-    return mockSubjects.filter((s) => subjectIds.includes(s.id));
-  }, [selectedClass]);
+    if (!subjectsData) return [];
+    const subjects = subjectsData.data || subjectsData || [];
+    // ClassSubject has nested subject object
+    return subjects.map((cs: any) => cs.subject || cs);
+  }, [subjectsData]);
 
-  // Get students in selected class
+  // Fetch students in selected class
+  const { data: studentsData, isLoading: isLoadingStudents } = useClassStudentsQuery(
+    parseInt(selectedClass) || 0,
+    { enabled: !!selectedClass }
+  );
   const classStudents = useMemo(() => {
-    if (!selectedClass) return [];
-    const classId = parseInt(selectedClass);
-    return mockStudents.filter((s) => s.current_class_id === classId && s.status === 'Active');
-  }, [selectedClass]);
+    if (!studentsData) return [];
+    const students = studentsData.data || studentsData || [];
+    // Filter active students
+    return students.filter((s: Student) => s.status === 'Active');
+  }, [studentsData]);
+
+  // Fetch existing results for selected class/subject
+  const { data: existingResultsData } = useSubjectResultsQuery(
+    {
+      classId: parseInt(selectedClass) || 0,
+      subjectId: parseInt(selectedSubject) || 0,
+      termId: currentTerm?.id,
+      sessionId: currentSession?.id,
+    },
+    { enabled: !!selectedClass && !!selectedSubject && !!currentTerm && !!currentSession }
+  );
+
+  // Bulk result mutation
+  const bulkResultMutation = useBulkResultMutation();
 
   // Filter students
   const filteredStudents = useMemo(() => {
-    return classStudents.filter((student) => {
-      const fullName = getFullName(student.first_name, student.last_name);
+    return classStudents.filter((student: Student) => {
+      const fullName = getFullName(student.firstName || student.first_name, student.lastName || student.last_name);
+      const admissionNo = student.admissionNo || student.admission_no || '';
       return (
         !searchQuery ||
         fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.admission_no.toLowerCase().includes(searchQuery.toLowerCase())
+        admissionNo.toLowerCase().includes(searchQuery.toLowerCase())
       );
     });
   }, [classStudents, searchQuery]);
 
-  // Load existing scores
+  // Load existing scores from API data
   useEffect(() => {
-    if (selectedClass && selectedSubject && assessmentType) {
-      const classId = parseInt(selectedClass);
-      const subjectId = parseInt(selectedSubject);
-      const existingResults = generateMockResultsForClassSubject(classId, subjectId);
-      
+    if (selectedClass && selectedSubject && assessmentType && existingResultsData) {
+      const results = existingResultsData.data || existingResultsData || [];
       const newScores: { [studentId: number]: number } = {};
-      existingResults.forEach((result) => {
-        const assessmentId = assessmentType === 'Test 1' ? 1 : assessmentType === 'Test 2' ? 2 : assessmentType === 'Test 3' ? 3 : 4;
-        if (result.assessment_id === assessmentId) {
-          newScores[result.student_id] = result.score;
+      
+      // Map assessment type to ID
+      const assessmentMap: { [key: string]: number } = {
+        'Test 1': 1,
+        'Test 2': 2,
+        'Test 3': 3,
+        'Exam': 4,
+      };
+      const assessmentId = assessmentMap[assessmentType];
+      
+      results.forEach((result: any) => {
+        if (result.assessment_id === assessmentId || result.assessmentId === assessmentId) {
+          const studentId = result.student_id || result.studentId;
+          newScores[studentId] = result.score;
         }
       });
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setScores(newScores);
     }
-  }, [selectedClass, selectedSubject, assessmentType]);
+  }, [selectedClass, selectedSubject, assessmentType, existingResultsData]);
 
   const handleScoreChange = (studentId: number, value: string) => {
     const numValue = parseInt(value) || 0;
-    const maxScore = assessmentType === 'Exam' ? 60 : 20;
+    const maxScore = assessmentType === 'Exam' ? 70 : 10;
     setScores({
       ...scores,
       [studentId]: Math.min(Math.max(0, numValue), maxScore),
     });
   };
 
-  const handleSave = () => {
-    console.log('Saving scores:', {
-      class: selectedClass,
-      subject: selectedSubject,
-      assessmentType,
-      scores,
-    });
-    setShowSaveModal(false);
+  const handleSave = async () => {
+    if (!currentSession || !currentTerm) {
+      console.error('Session or term not available');
+      return;
+    }
+
+    // Map assessment type to ID
+    const assessmentMap: { [key: string]: number } = {
+      'Test 1': 1,
+      'Test 2': 2,
+      'Test 3': 3,
+      'Exam': 4,
+    };
+    const assessmentId = assessmentMap[assessmentType];
+
+    try {
+      await bulkResultMutation.mutateAsync({
+        class_id: parseInt(selectedClass),
+        subject_id: parseInt(selectedSubject),
+        teacher_id: 1, // TODO: Get from auth context
+        session_id: currentSession.id,
+        term_id: currentTerm.id,
+        assessment_id: assessmentId,
+        scores: Object.entries(scores).map(([studentId, score]) => ({
+          student_id: parseInt(studentId),
+          score,
+        })),
+      });
+      setShowSaveModal(false);
+    } catch (error) {
+      console.error('Error saving scores:', error);
+    }
   };
 
-  const classOptions = availableClasses.map((c) => ({
-    value: c.id.toString(),
+  const classOptions = availableClasses.map((c: Class) => ({
+    value: (c.id || (c as any).id).toString(),
     label: getClassDisplayName(c),
   }));
 
-  const subjectOptions = availableSubjects.map((s) => ({
-    value: s.id.toString(),
-    label: s.subject_name,
+  const subjectOptions = availableSubjects.map((s: Subject) => ({
+    value: (s.id || (s as any).id).toString(),
+    label: s.subjectName || s.subject_name || '',
   }));
 
   const assessmentOptions = Object.values(ASSESSMENT_TYPES).map((type) => ({
@@ -119,32 +181,34 @@ const ScoreEntry: React.FC = () => {
     label: type.name,
   }));
 
-  const getMaxScore = () => (assessmentType === 'Exam' ? 60 : 20);
+  const getMaxScore = () => (assessmentType === 'Exam' ? 70 : 10);
+
+  const isLoading = isLoadingClasses || isLoadingSubjects || isLoadingStudents;
 
   const columns = [
     {
       key: 'sn',
       label: 'S/N',
-      render: (_value: unknown, _row: (typeof mockStudents)[0], index?: number) => (
+      render: (_value: unknown, _row: Student, index?: number) => (
         <span className="text-secondary-500">{(index || 0) + 1}</span>
       ),
     },
     {
       key: 'student',
       label: 'Student',
-      render: (_value: unknown, row: (typeof mockStudents)[0]) => (
+      render: (_value: unknown, row: Student) => (
         <div>
           <p className="font-medium text-secondary-900">
-            {getFullName(row.first_name, row.last_name)}
+            {getFullName(row.firstName || row.first_name, row.lastName || row.last_name)}
           </p>
-          <p className="text-xs text-secondary-500">{row.admission_no}</p>
+          <p className="text-xs text-secondary-500">{row.admissionNo || row.admission_no}</p>
         </div>
       ),
     },
     {
       key: 'gender',
       label: 'Gender',
-      render: (_value: unknown, row: (typeof mockStudents)[0]) => (
+      render: (_value: unknown, row: Student) => (
         <Badge variant={row.gender === 'Male' ? 'info' : 'secondary'} size="sm">
           {row.gender}
         </Badge>
@@ -153,7 +217,7 @@ const ScoreEntry: React.FC = () => {
     {
       key: 'score',
       label: `Score (Max: ${getMaxScore()})`,
-      render: (_value: unknown, row: (typeof mockStudents)[0]) => (
+      render: (_value: unknown, row: Student) => (
         <Input
           type="number"
           min={0}
@@ -167,7 +231,7 @@ const ScoreEntry: React.FC = () => {
     {
       key: 'status',
       label: 'Status',
-      render: (_value: unknown, row: (typeof mockStudents)[0]) => {
+      render: (_value: unknown, row: Student) => {
         const score = scores[row.id];
         if (score === undefined || score === null) {
           return (
@@ -188,6 +252,18 @@ const ScoreEntry: React.FC = () => {
   const enteredCount = Object.keys(scores).length;
   const pendingCount = filteredStudents.length - enteredCount;
 
+  // Get selected class and subject names for display
+  const selectedClassObj = availableClasses.find((c: Class) => c.id === parseInt(selectedClass));
+  const selectedSubjectObj = availableSubjects.find((s: Subject) => s.id === parseInt(selectedSubject));
+
+  if (isLoading && !classesData) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -195,7 +271,7 @@ const ScoreEntry: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-secondary-900">Score Entry</h1>
           <p className="text-secondary-500 mt-1">
-            {CURRENT_SESSION} - {CURRENT_TERM}
+            {currentSession?.sessionName || 'Loading...'} - {currentTerm?.termName || 'Loading...'}
           </p>
         </div>
       </div>
@@ -251,12 +327,8 @@ const ScoreEntry: React.FC = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <CardTitle>
-                  {
-                    mockClasses.find((c) => c.id === parseInt(selectedClass))
-                      ? getClassDisplayName(mockClasses.find((c) => c.id === parseInt(selectedClass))!)
-                      : ''
-                  }{' '}
-                  - {mockSubjects.find((s) => s.id === parseInt(selectedSubject))?.subject_name} (
+                  {selectedClassObj ? getClassDisplayName(selectedClassObj) : ''}{' '}
+                  - {selectedSubjectObj?.subjectName || selectedSubjectObj?.subject_name || ''} (
                   {assessmentType})
                 </CardTitle>
                 <div className="flex items-center gap-4 mt-2">
@@ -316,21 +388,33 @@ const ScoreEntry: React.FC = () => {
         size="sm"
         footer={
           <>
-            <Button variant="outline" onClick={() => setShowSaveModal(false)}>
+            <Button variant="outline" onClick={() => setShowSaveModal(false)} disabled={bulkResultMutation.isPending}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>Confirm Save</Button>
+            <Button onClick={handleSave} disabled={bulkResultMutation.isPending}>
+              {bulkResultMutation.isPending ? 'Saving...' : 'Confirm Save'}
+            </Button>
           </>
         }
       >
         <div className="space-y-4">
           <Alert variant="info">
             You are about to save {enteredCount} scores for {assessmentType} in{' '}
-            {mockSubjects.find((s) => s.id === parseInt(selectedSubject))?.subject_name}.
+            {selectedSubjectObj?.subjectName || selectedSubjectObj?.subject_name || ''}.
           </Alert>
           <p className="text-sm text-secondary-600">
             Make sure all scores are correct before saving. You can edit scores again later if needed.
           </p>
+          {bulkResultMutation.isPending && (
+            <div className="flex justify-center">
+              <Spinner size="md" />
+            </div>
+          )}
+          {bulkResultMutation.isError && (
+            <Alert variant="error">
+              Failed to save scores. Please try again.
+            </Alert>
+          )}
         </div>
       </Modal>
     </div>

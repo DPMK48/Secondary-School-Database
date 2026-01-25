@@ -8,14 +8,15 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user, token } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
     return <PageLoader message="Verifying authentication..." />;
   }
 
-  if (!isAuthenticated) {
+  // Check for valid authentication (must have user, token, and isAuthenticated flag)
+  if (!isAuthenticated || !user || !token) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

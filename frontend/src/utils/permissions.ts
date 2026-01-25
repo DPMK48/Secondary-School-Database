@@ -68,18 +68,18 @@ export function canExportReports(role: UserRole): boolean {
 
 export function getRoleDisplayName(role: UserRole): string {
   const roleNames: Record<UserRole, string> = {
-    admin: 'Administrator',
-    form_teacher: 'Form Teacher',
-    subject_teacher: 'Subject Teacher',
+    Admin: 'Administrator',
+    'Form Teacher': 'Form Teacher',
+    'Subject Teacher': 'Subject Teacher',
   };
   return roleNames[role] || role;
 }
 
 export function getRoleBadgeColor(role: UserRole): string {
   const colors: Record<UserRole, string> = {
-    admin: 'bg-purple-100 text-purple-800',
-    form_teacher: 'bg-green-100 text-green-800',
-    subject_teacher: 'bg-yellow-100 text-yellow-800',
+    Admin: 'bg-purple-100 text-purple-800',
+    'Form Teacher': 'bg-green-100 text-green-800',
+    'Subject Teacher': 'bg-yellow-100 text-yellow-800',
   };
   return colors[role] || 'bg-gray-100 text-gray-800';
 }

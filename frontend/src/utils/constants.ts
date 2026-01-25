@@ -1,7 +1,7 @@
 import type { GradeConfig, UserRole } from '../types';
 
 // API Configuration
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 // Application Constants
 export const APP_NAME = 'SchoolHub';
@@ -27,7 +27,7 @@ export const ASSESSMENT_TYPES = {
 
 // Role Permissions
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
-  admin: [
+  Admin: [
     'manage_users',
     'manage_classes',
     'manage_subjects',
@@ -44,7 +44,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'view_all_classes',
     'add_remarks',
   ],
-  form_teacher: [
+  'Form Teacher': [
     'view_class_students',
     'view_class_results',
     'view_subject_teacher_results',
@@ -52,7 +52,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'add_remarks',
     'view_reports',
   ],
-  subject_teacher: [
+  'Subject Teacher': [
     'enter_scores',
     'view_assigned_classes',
     'view_assigned_subjects',
@@ -61,7 +61,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
 
 // Navigation Items by Role
 export const NAV_ITEMS = {
-  admin: [
+  Admin: [
     { label: 'Dashboard', path: '/dashboard', icon: 'LayoutDashboard' },
     { label: 'Students', path: '/dashboard/students', icon: 'Users' },
     { label: 'Teachers', path: '/dashboard/teachers', icon: 'GraduationCap' },
@@ -72,14 +72,15 @@ export const NAV_ITEMS = {
     { label: 'Reports', path: '/dashboard/reports', icon: 'FileText' },
     { label: 'Settings', path: '/dashboard/settings', icon: 'Settings' },
   ],
-  form_teacher: [
+  'Form Teacher': [
     { label: 'Dashboard', path: '/dashboard', icon: 'LayoutDashboard' },
     { label: 'My Class', path: '/dashboard/classes', icon: 'School' },
     { label: 'Students', path: '/dashboard/students', icon: 'Users' },
+    { label: 'Attendance', path: '/dashboard/attendance', icon: 'CalendarCheck' },
     { label: 'Results', path: '/dashboard/results', icon: 'ClipboardList' },
     { label: 'Reports', path: '/dashboard/reports', icon: 'FileText' },
   ],
-  subject_teacher: [
+  'Subject Teacher': [
     { label: 'Dashboard', path: '/dashboard', icon: 'LayoutDashboard' },
     { label: 'My Classes', path: '/dashboard/classes', icon: 'School' },
     { label: 'Score Entry', path: '/dashboard/results/entry', icon: 'Edit' },
@@ -117,6 +118,7 @@ export const DISPLAY_DATE_FORMAT = 'DD MMM, YYYY';
 export const STORAGE_KEYS = {
   TOKEN: 'auth_token',
   USER: 'user_data',
+  ORIGINAL_USER: 'original_user_data',
   THEME: 'app_theme',
 };
 

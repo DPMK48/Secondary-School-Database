@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Button,
   Select,
@@ -16,18 +16,51 @@ import {
   getClassDisplayName,
 } from '../../utils/mockData';
 import { getFullName, calculateGrade, getGradeVariant, cn } from '../../utils/helpers';
-import { CURRENT_SESSION, CURRENT_TERM, SESSIONS, TERMS, GRADE_CONFIG } from '../../utils/constants';
+import { GRADE_CONFIG } from '../../utils/constants';
 import { Download, Printer, FileText, Eye } from 'lucide-react';
+import { useCurrentSession, useCurrentTerm, useSessions, useTerms } from '../../hooks/useSessionTerm';
 
 const ResultSummary: React.FC = () => {
+  // Fetch session and term data from backend
+  const { data: currentSession } = useCurrentSession();
+  const { data: currentTerm } = useCurrentTerm();
+  const { data: sessionsResponse } = useSessions();
+  const { data: termsResponse } = useTerms();
+  
   const [selectedClass, setSelectedClass] = useState('');
-  const [selectedSession, setSelectedSession] = useState(CURRENT_SESSION);
-  const [selectedTerm, setSelectedTerm] = useState(CURRENT_TERM);
+  const [selectedSession, setSelectedSession] = useState('');
+  const [selectedTerm, setSelectedTerm] = useState('');
+
+  // Set initial values when data loads
+  useEffect(() => {
+    if (currentSession && !selectedSession) {
+      setSelectedSession(currentSession.id?.toString() || '');
+    }
+  }, [currentSession, selectedSession]);
+
+  useEffect(() => {
+    if (currentTerm && !selectedTerm) {
+      setSelectedTerm(currentTerm.id?.toString() || '');
+    }
+  }, [currentTerm, selectedTerm]);
 
   // Options
   const classOptions = mockClasses.map((c) => ({ value: c.id.toString(), label: getClassDisplayName(c) }));
-  const sessionOptions = SESSIONS.map((s) => ({ value: s, label: s }));
-  const termOptions = TERMS.map((t) => ({ value: t.id.toString(), label: t.name }));
+  const sessionOptions = useMemo(() => {
+    if (!sessionsResponse?.data) return [];
+    return sessionsResponse.data.map((s: any) => ({ 
+      value: s.id.toString(), 
+      label: s.sessionName 
+    }));
+  }, [sessionsResponse]);
+  
+  const termOptions = useMemo(() => {
+    if (!termsResponse?.data) return [];
+    return termsResponse.data.map((t: any) => ({ 
+      value: t.id.toString(), 
+      label: t.termName 
+    }));
+  }, [termsResponse]);
 
   // Get students in selected class
   const classStudents = useMemo(() => {

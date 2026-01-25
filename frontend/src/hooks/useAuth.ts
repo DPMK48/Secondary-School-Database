@@ -1,7 +1,19 @@
 import { useAuthStore } from '../store';
 
 export function useAuth() {
-  const { user, token, isAuthenticated, isLoading, login, logout, checkAuth } = useAuthStore();
+  const { 
+    user, 
+    token, 
+    isAuthenticated, 
+    isLoading, 
+    login, 
+    logout, 
+    checkAuth,
+    impersonate,
+    exitImpersonation,
+    originalUser,
+    isImpersonating,
+  } = useAuthStore();
 
   return {
     user,
@@ -11,9 +23,15 @@ export function useAuth() {
     login,
     logout,
     checkAuth,
-    isAdmin: user?.role === 'admin',
-    isFormTeacher: user?.role === 'form_teacher',
-    isSubjectTeacher: user?.role === 'subject_teacher',
+    impersonate,
+    exitImpersonation,
+    originalUser,
+    isImpersonating,
+    isAdmin: user?.role === 'Admin',
+    isFormTeacher: user?.role === 'Form Teacher',
+    isSubjectTeacher: user?.role === 'Subject Teacher',
+    teacherId: user?.teacherId,
+    studentId: user?.studentId,
   };
 }
 

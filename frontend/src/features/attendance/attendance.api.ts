@@ -2,34 +2,33 @@ import api from '../../services/axios';
 import type { Attendance, PaginatedResponse, ApiResponse } from '../../types';
 
 export interface AttendanceFilters {
-  student_id?: number;
-  class_id?: number;
+  studentId?: number;
+  classId?: number;
   date?: string;
-  term_id?: number;
-  session_id?: number;
+  termId?: number;
+  sessionId?: number;
   page?: number;
-  per_page?: number;
+  perPage?: number;
 }
 
 export interface MarkAttendanceData {
-  student_id: number;
-  class_id: number;
+  studentId: number;
+  classId: number;
   date: string;
   status: 'Present' | 'Absent' | 'Late' | 'Excused';
-  session_id: number;
-  term_id: number;
+  sessionId: number;
+  termId: number;
   remarks?: string;
 }
 
 export interface BulkAttendanceData {
-  class_id: number;
+  classId: number;
   date: string;
-  session_id: number;
-  term_id: number;
-  records: Array<{
-    student_id: number;
+  sessionId: number;
+  termId: number;
+  attendances: Array<{
+    studentId: number;
     status: 'Present' | 'Absent' | 'Late' | 'Excused';
-    remarks?: string;
   }>;
 }
 

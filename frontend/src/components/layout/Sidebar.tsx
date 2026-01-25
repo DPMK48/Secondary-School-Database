@@ -42,7 +42,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, isMobileOpen, onMobileClose }
   const { user } = useAuth();
   const location = useLocation();
 
-  const navItems = user?.role ? NAV_ITEMS[user.role] : [];
+  const navItems = user?.role ? (NAV_ITEMS[user.role as keyof typeof NAV_ITEMS] || []) : [];
 
   const renderNavItem = (item: { label: string; path: string; icon: string }) => {
     const Icon = iconMap[item.icon] || LayoutDashboard;
@@ -72,9 +72,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, isMobileOpen, onMobileClose }
     <>
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-6 border-b border-secondary-200">
-        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center">
-          <GraduationCap className="h-6 w-6 text-white" />
-        </div>
+        <img 
+          src="/icons/logo.png" 
+          alt="SchoolHub Logo" 
+          className="h-10 w-10 rounded-xl object-contain"
+        />
         {isOpen && (
           <div>
             <h1 className="font-bold text-lg text-secondary-900">{APP_NAME}</h1>

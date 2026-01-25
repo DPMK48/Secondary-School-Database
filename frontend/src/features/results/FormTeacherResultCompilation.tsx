@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Button,
   Input,
@@ -10,16 +10,12 @@ import {
   Table,
   Badge,
   Alert,
+  Spinner,
 } from '../../components/common';
-import {
-  mockStudents,
-  mockClasses,
-  mockSubjects,
-  generateMockResultsForClassSubject,
-  getClassDisplayName,
-} from '../../utils/mockData';
 import { getFullName, calculateGrade, getGradeVariant, cn } from '../../utils/helpers';
-import { CURRENT_SESSION, CURRENT_TERM, SESSIONS, TERMS } from '../../utils/constants';
+import { useCurrentSession, useCurrentTerm, useSessions, useTerms } from '../../hooks/useSessionTerm';
+import { useClassesQuery, useClassStudentsQuery, useClassSubjectsQuery } from '../../hooks/useClasses';
+import { useFormTeacherCompilationQuery } from '../../hooks/useResults';
 import {
   Search,
   TrendingUp,
@@ -28,88 +24,159 @@ import {
   Download,
   Eye,
   BarChart3,
+  Save,
+  Edit2,
 } from 'lucide-react';
 import type { StudentSubjectScore } from './results.types';
+import { useAuth } from '../../hooks/useAuth';
+import type { Class, Subject, Student } from '../../types';
+
+// Helper to get class display name
+const getClassDisplayName = (classItem: Class | { className?: string; class_name?: string; arm?: string }) => {
+  const name = classItem.className || (classItem as any).class_name || '';
+  const arm = classItem.arm || '';
+  return `${name} ${arm}`.trim();
+};
+
+interface StudentRemark {
+  student_id: number;
+  remark: string;
+}
 
 const FormTeacherResultCompilation: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'Admin';
+  
+  // Fetch session and term data from backend
+  const { data: currentSession } = useCurrentSession();
+  const { data: currentTerm } = useCurrentTerm();
+  const { data: sessionsResponse } = useSessions();
+  const { data: termsResponse } = useTerms();
+  
   const [selectedClass, setSelectedClass] = useState('');
-  const [selectedSession, setSelectedSession] = useState(CURRENT_SESSION);
-  const [selectedTerm, setSelectedTerm] = useState(CURRENT_TERM.toString());
+  const [selectedSession, setSelectedSession] = useState('');
+  const [selectedTerm, setSelectedTerm] = useState('');
+  
+  // Set initial values when data loads
+  useEffect(() => {
+    if (currentSession && !selectedSession) {
+      setSelectedSession(currentSession.id?.toString() || '');
+    }
+  }, [currentSession, selectedSession]);
+
+  useEffect(() => {
+    if (currentTerm && !selectedTerm) {
+      setSelectedTerm(currentTerm.id?.toString() || '');
+    }
+  }, [currentTerm, selectedTerm]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<StudentSubjectScore | null>(null);
   const [showStudentDetail, setShowStudentDetail] = useState(false);
+  const [studentRemarks, setStudentRemarks] = useState<Record<number, string>>({});
+  const [editingRemarkId, setEditingRemarkId] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Get form teacher's assigned class (mock - get from auth context in real app)
-  const formTeacherClass = mockClasses[0]; // Mock: first class
+  // Fetch classes from API
+  const { data: classesData, isLoading: isLoadingClasses } = useClassesQuery();
+  const availableClasses = useMemo(() => {
+    if (!classesData) return [];
+    return Array.isArray(classesData) ? classesData : classesData.data || [];
+  }, [classesData]);
 
-  // Get all subjects taught in the class
+  // Fetch students in selected class
+  const { data: studentsData, isLoading: isLoadingStudents } = useClassStudentsQuery(
+    parseInt(selectedClass) || 0,
+    { enabled: !!selectedClass }
+  );
+
+  // Fetch subjects for selected class
+  const { data: subjectsData, isLoading: isLoadingSubjects } = useClassSubjectsQuery(
+    parseInt(selectedClass) || 0,
+    { enabled: !!selectedClass }
+  );
+
+  // Fetch compiled results from API
+  const { data: compilationData, isLoading: isLoadingCompilation } = useFormTeacherCompilationQuery(
+    parseInt(selectedClass) || 0,
+    { 
+      termId: parseInt(selectedTerm) || undefined,
+      sessionId: parseInt(selectedSession) || undefined,
+    },
+    { enabled: !!selectedClass && !!selectedTerm && !!selectedSession }
+  );
+
+  // Get class subjects
   const classSubjects = useMemo(() => {
-    return mockSubjects.filter((s) => s.level === formTeacherClass?.level);
-  }, [formTeacherClass]);
+    if (!subjectsData) return [];
+    const subjects = subjectsData.data || subjectsData || [];
+    return subjects.map((cs: any) => cs.subject || cs);
+  }, [subjectsData]);
 
-  // Get students in the form teacher's class
+  // Get students in the class
   const classStudents = useMemo(() => {
-    if (!selectedClass) return [];
-    const classId = parseInt(selectedClass);
-    return mockStudents
-      .filter((s) => s.current_class_id === classId && s.status === 'Active')
-      .sort((a, b) => getFullName(a.first_name, a.last_name).localeCompare(getFullName(b.first_name, b.last_name)));
-  }, [selectedClass]);
+    if (!studentsData) return [];
+    const students = studentsData.data || studentsData || [];
+    return students
+      .filter((s: Student) => s.status === 'Active')
+      .sort((a: Student, b: Student) => {
+        const nameA = getFullName(a.firstName || a.first_name, a.lastName || a.last_name);
+        const nameB = getFullName(b.firstName || b.first_name, b.lastName || b.last_name);
+        return nameA.localeCompare(nameB);
+      });
+  }, [studentsData]);
 
-  // Compile results for all students with automatic average calculation
+  // Compile results for all students - use API data when available
   const compiledResults = useMemo((): StudentSubjectScore[] => {
     if (!selectedClass) return [];
-    const classId = parseInt(selectedClass);
+    
+    // If we have API data, use it
+    if (compilationData) {
+      const data = compilationData.data || compilationData;
+      if (Array.isArray(data)) {
+        return data.map((item: any) => ({
+          student_id: item.student_id || item.studentId,
+          student_name: item.student_name || item.studentName || 
+            getFullName(item.student?.firstName || item.student?.first_name, item.student?.lastName || item.student?.last_name),
+          admission_no: item.admission_no || item.admissionNo || item.student?.admissionNo || item.student?.admission_no || '',
+          subject_scores: item.subject_scores || item.subjectScores || [],
+          total_score: item.total_score || item.totalScore || 0,
+          average_score: item.average_score || item.averageScore || 0,
+          number_of_subjects: item.number_of_subjects || item.numberOfSubjects || 0,
+          overall_grade: item.overall_grade || item.overallGrade || 'N/A',
+        }));
+      }
+    }
 
-    return classStudents.map((student) => {
-      const subjectScores = classSubjects.map((subject) => {
-        const results = generateMockResultsForClassSubject(classId, subject.id).filter(
-          (r) => r.student_id === student.id
-        );
-
-        const test1 = results.find((r) => r.assessment_id === 1)?.score || 0;
-        const test2 = results.find((r) => r.assessment_id === 2)?.score || 0;
-        const test3 = results.find((r) => r.assessment_id === 3)?.score || 0;
-        const exam = results.find((r) => r.assessment_id === 4)?.score || 0;
-
-        const total = test1 + test2 + test3 + exam;
-        const gradeInfo = calculateGrade(total);
-
+    // Fallback: Build from students if no compiled data yet
+    return classStudents.map((student: Student) => {
+      const subjectScores = classSubjects.map((subject: Subject) => {
         return {
           subject_id: subject.id,
-          subject_name: subject.subject_name,
-          test1,
-          test2,
-          test3,
-          exam,
-          total,
-          grade: gradeInfo.grade,
-          remark: gradeInfo.remark,
+          subject_name: subject.subjectName || subject.subject_name || '',
+          test1: 0,
+          test2: 0,
+          test3: 0,
+          exam: 0,
+          total: 0,
+          grade: 'N/A',
+          remark: 'No scores entered',
         };
       });
 
-      // Filter subjects that have at least one score entered
-      const enteredSubjects = subjectScores.filter(
-        (s) => s.test1 > 0 || s.test2 > 0 || s.test3 > 0 || s.exam > 0
-      );
-
-      const totalScore = enteredSubjects.reduce((sum, s) => sum + s.total, 0);
-      const numberOfSubjects = enteredSubjects.length;
-      const averageScore = numberOfSubjects > 0 ? totalScore / numberOfSubjects : 0;
-      const overallGrade = calculateGrade(averageScore);
-
       return {
         student_id: student.id,
-        student_name: getFullName(student.first_name, student.last_name),
-        admission_no: student.admission_no,
+        student_name: getFullName(student.firstName || student.first_name, student.lastName || student.last_name),
+        admission_no: student.admissionNo || student.admission_no || '',
         subject_scores: subjectScores,
-        total_score: totalScore,
-        average_score: averageScore,
-        number_of_subjects: numberOfSubjects,
-        overall_grade: overallGrade.grade,
+        total_score: 0,
+        average_score: 0,
+        number_of_subjects: 0,
+        overall_grade: 'N/A',
       };
     });
-  }, [selectedClass, classStudents, classSubjects]);
+  }, [selectedClass, compilationData, classStudents, classSubjects]);
 
   // Rank students by average score
   const rankedResults = useMemo(() => {
@@ -166,6 +233,74 @@ const FormTeacherResultCompilation: React.FC = () => {
     setSelectedStudent(student);
     setShowStudentDetail(true);
   };
+
+  const handleRemarkChange = (studentId: number, value: string) => {
+    setStudentRemarks((prev) => ({
+      ...prev,
+      [studentId]: value,
+    }));
+  };
+
+  const handleSaveResults = async () => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      // Check if all students have remarks
+      const studentsWithoutRemarks = rankedResults.filter(
+        (student) => !studentRemarks[student.student_id] || studentRemarks[student.student_id].trim() === ''
+      );
+
+      if (studentsWithoutRemarks.length > 0) {
+        setErrorMessage(
+          `Please add remarks for all students. ${studentsWithoutRemarks.length} student(s) still need remarks.`
+        );
+        setIsSaving(false);
+        return;
+      }
+
+      // Prepare data to send to backend
+      const compiledData = rankedResults.map((student) => ({
+        student_id: student.student_id,
+        class_id: parseInt(selectedClass),
+        session: selectedSession,
+        term_id: parseInt(selectedTerm),
+        total_score: student.total_score,
+        average_score: student.average_score,
+        position: student.position,
+        overall_grade: student.overall_grade,
+        form_teacher_remark: studentRemarks[student.student_id],
+        number_of_subjects: student.number_of_subjects,
+        subject_scores: student.subject_scores,
+      }));
+
+      // Simulate API call (replace with actual API call when backend is ready)
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // TODO: Uncomment when backend API is ready
+      // await resultsApi.submitFormTeacherCompilation(compiledData);
+
+      setSuccessMessage(
+        `Successfully saved results for ${rankedResults.length} students. The results are now pending admin approval.`
+      );
+      
+      // Clear remarks after successful save
+      setStudentRemarks({});
+    } catch (error) {
+      setErrorMessage('Failed to save results. Please try again.');
+      console.error('Error saving results:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Check if all students have remarks
+  const allRemarksComplete = useMemo(() => {
+    return rankedResults.every(
+      (student) => studentRemarks[student.student_id] && studentRemarks[student.student_id].trim() !== ''
+    );
+  }, [rankedResults, studentRemarks]);
 
   const columns = [
     {
@@ -236,6 +371,54 @@ const FormTeacherResultCompilation: React.FC = () => {
       },
     },
     {
+      key: 'remark',
+      label: 'Form Teacher Remark',
+      render: (_value: unknown, row: StudentSubjectScore) => {
+        const isEditing = editingRemarkId === row.student_id;
+        const hasRemark = studentRemarks[row.student_id]?.trim();
+
+        return (
+          <div className="min-w-[250px]">
+            {isEditing ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="text"
+                  value={studentRemarks[row.student_id] || ''}
+                  onChange={(e) => handleRemarkChange(row.student_id, e.target.value)}
+                  placeholder="Enter remark..."
+                  className="text-sm"
+                  autoFocus
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditingRemarkId(null)}
+                >
+                  ✓
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "text-sm flex-1",
+                  hasRemark ? "text-secondary-900" : "text-secondary-400 italic"
+                )}>
+                  {hasRemark || "Click to add remark"}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditingRemarkId(row.student_id)}
+                >
+                  <Edit2 className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       key: 'actions',
       label: 'Actions',
       render: (_value: unknown, row: StudentSubjectScore) => (
@@ -268,7 +451,7 @@ const FormTeacherResultCompilation: React.FC = () => {
                 onChange={(value) => setSelectedClass(value)}
                 options={[
                   { value: '', label: 'Choose a class...' },
-                  ...mockClasses.map((c) => ({ value: c.id.toString(), label: getClassDisplayName(c) })),
+                  ...availableClasses.map((c: Class) => ({ value: c.id.toString(), label: getClassDisplayName(c) })),
                 ]}
               />
             </div>
@@ -278,7 +461,13 @@ const FormTeacherResultCompilation: React.FC = () => {
               <Select
                 value={selectedSession}
                 onChange={(value) => setSelectedSession(value)}
-                options={SESSIONS.map((s) => ({ value: s, label: s }))}
+                options={[
+                  { value: '', label: 'Select session...' },
+                  ...(sessionsResponse?.data || []).map((s: any) => ({ 
+                    value: s.id.toString(), 
+                    label: s.sessionName 
+                  }))
+                ]}
               />
             </div>
 
@@ -287,7 +476,13 @@ const FormTeacherResultCompilation: React.FC = () => {
               <Select
                 value={selectedTerm}
                 onChange={(value) => setSelectedTerm(value)}
-                options={TERMS.map((t) => ({ value: t.id.toString(), label: t.name }))}
+                options={[
+                  { value: '', label: 'Select term...' },
+                  ...(termsResponse?.data || []).map((t: any) => ({ 
+                    value: t.id.toString(), 
+                    label: t.termName 
+                  }))
+                ]}
               />
             </div>
           </div>
@@ -349,16 +544,30 @@ const FormTeacherResultCompilation: React.FC = () => {
 
       {/* Information Alert */}
       {selectedClass && (
-        <Alert variant="info">
-          <BarChart3 className="h-4 w-4" />
-          <div>
-            <p className="font-medium">Automatic Grade Compilation</p>
-            <p className="text-sm mt-1">
-              Average scores are automatically calculated based on the number of subjects entered by subject
-              teachers. The position is determined by the overall average score.
-            </p>
-          </div>
-        </Alert>
+        <>
+          <Alert variant="info">
+            <BarChart3 className="h-4 w-4" />
+            <div>
+              <p className="font-medium">Automatic Grade Compilation</p>
+              <p className="text-sm mt-1">
+                Average scores and positions are automatically calculated based on subject scores entered by subject
+                teachers. Add remarks for each student before saving the compiled results.
+              </p>
+            </div>
+          </Alert>
+
+          {/* Success/Error Messages */}
+          {successMessage && (
+            <Alert variant="success">
+              {successMessage}
+            </Alert>
+          )}
+          {errorMessage && (
+            <Alert variant="error">
+              {errorMessage}
+            </Alert>
+          )}
+        </>
       )}
 
       {/* Results Table */}
@@ -370,11 +579,28 @@ const FormTeacherResultCompilation: React.FC = () => {
                 <FileText className="h-5 w-5" />
                 Student Results Summary
               </CardTitle>
-              <Button variant="outline">
-                <Download className="h-4 w-4" />
-                Export Results
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline"
+                  onClick={handleSaveResults}
+                  disabled={!allRemarksComplete || isSaving}
+                  leftIcon={isSaving ? <Spinner size="sm" /> : <Save className="h-4 w-4" />}
+                >
+                  {isSaving ? 'Saving...' : 'Save & Submit for Approval'}
+                </Button>
+                {isAdmin && (
+                  <Button variant="outline">
+                    <Download className="h-4 w-4" />
+                    Export Results
+                  </Button>
+                )}
+              </div>
             </div>
+            {!allRemarksComplete && rankedResults.length > 0 && (
+              <p className="text-sm text-orange-600 mt-2">
+                Please add remarks for all students before submitting
+              </p>
+            )}
           </CardHeader>
           <CardContent>
             {/* Search */}

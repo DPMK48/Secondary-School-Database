@@ -3,7 +3,7 @@ import type { UserRole } from '../types';
 import { ROLE_PERMISSIONS } from '../utils/constants';
 
 export function useRole() {
-  const { user } = useAuth();
+  const { user, isAuthenticated, token } = useAuth();
   const role = user?.role as UserRole | undefined;
 
   const hasPermission = (permission: string): boolean => {
@@ -18,11 +18,13 @@ export function useRole() {
 
   return {
     role,
+    isAuthenticated,
+    token,
     hasPermission,
     canAccess,
-    isAdmin: role === 'admin',
-    isFormTeacher: role === 'form_teacher',
-    isSubjectTeacher: role === 'subject_teacher',
+    isAdmin: role === 'Admin',
+    isFormTeacher: role === 'Form Teacher',
+    isSubjectTeacher: role === 'Subject Teacher',
     canManageUsers: hasPermission('manage_users'),
     canManageClasses: hasPermission('manage_classes'),
     canManageSubjects: hasPermission('manage_subjects'),

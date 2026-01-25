@@ -43,7 +43,7 @@ export interface StudentFilters {
   status?: 'Active' | 'Graduated' | 'Transferred' | 'Suspended';
   gender?: 'Male' | 'Female';
   page?: number;
-  per_page?: number;
+  perPage?: number;
 }
 
 export interface StudentBulkUpload {

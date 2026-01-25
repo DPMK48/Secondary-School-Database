@@ -6,7 +6,7 @@ export interface StudentFilters {
   status?: string;
   search?: string;
   page?: number;
-  per_page?: number;
+  perPage?: number;
 }
 
 export interface CreateStudentData {
@@ -29,42 +29,56 @@ export const studentsApi = {
   /**
    * Get all students with optional filters
    */
-  getAll: (filters?: StudentFilters) =>
-    api.get<PaginatedResponse<Student>>('/students', { params: filters }),
+  getAll: async (filters?: StudentFilters) => {
+    const response = await api.get<any>('/students', { params: filters });
+    return response.data; // Backend returns { success, data: [...], meta: {...} }
+  },
 
   /**
    * Get single student by ID
    */
-  getById: (id: number) =>
-    api.get<ApiResponse<Student>>(`/students/${id}`),
+  getById: async (id: number) => {
+    const response = await api.get<any>(`/students/${id}`);
+    return response.data; // Backend returns { success, data: {...}, message }
+  },
 
   /**
    * Create new student
    */
-  create: (data: CreateStudentData) =>
-    api.post<ApiResponse<Student>>('/students', data),
+  create: async (data: CreateStudentData) => {
+    const response = await api.post<any>('/students', data);
+    return response.data;
+  },
 
   /**
    * Update existing student
    */
-  update: (id: number, data: UpdateStudentData) =>
-    api.put<ApiResponse<Student>>(`/students/${id}`, data),
+  update: async (id: number, data: UpdateStudentData) => {
+    const response = await api.patch<any>(`/students/${id}`, data);
+    return response.data;
+  },
 
   /**
    * Delete student
    */
-  delete: (id: number) =>
-    api.delete<ApiResponse<void>>(`/students/${id}`),
+  delete: async (id: number) => {
+    const response = await api.delete<any>(`/students/${id}`);
+    return response.data;
+  },
 
   /**
    * Get student's results
    */
-  getResults: (id: number, params?: { term_id?: number; session_id?: number }) =>
-    api.get<ApiResponse<any>>(`/students/${id}/results`, { params }),
+  getResults: async (id: number, params?: { term_id?: number; session_id?: number }) => {
+    const response = await api.get<any>(`/students/${id}/results`, { params });
+    return response.data;
+  },
 
   /**
    * Get student's attendance
    */
-  getAttendance: (id: number, params?: { term_id?: number; session_id?: number }) =>
-    api.get<ApiResponse<any>>(`/students/${id}/attendance`, { params }),
+  getAttendance: async (id: number, params?: { term_id?: number; session_id?: number }) => {
+    const response = await api.get<any>(`/students/${id}/attendance`, { params });
+    return response.data;
+  },
 };

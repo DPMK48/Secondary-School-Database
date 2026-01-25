@@ -9,7 +9,8 @@ const ResultsHub: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { canEnterScores, canViewAllResults, canApproveResults } = useRole();
-  const isSubjectTeacher = user?.role === 'subject_teacher';
+  const isSubjectTeacher = user?.role === 'Subject Teacher';
+  const isFormTeacher = user?.role === 'Form Teacher';
 
   const sections = [
     {
@@ -18,35 +19,19 @@ const ResultsHub: React.FC = () => {
       icon: Edit,
       path: '/dashboard/results/subject-teacher-entry',
       color: 'bg-blue-500',
-      show: canEnterScores,
+      show: canEnterScores && isSubjectTeacher,
     },
     {
       title: 'Form Teacher Compilation',
-      description: 'View compiled results from all subjects with automatic average calculation',
+      description: 'Compile results, calculate averages, assign positions, and add remarks',
       icon: ClipboardList,
       path: '/dashboard/results/form-teacher-compilation',
       color: 'bg-indigo-500',
-      show: canViewAllResults,
-    },
-    {
-      title: 'Score Entry (Classic)',
-      description: 'Enter and manage student scores for assigned subjects',
-      icon: BookOpen,
-      path: '/dashboard/results/entry',
-      color: 'bg-cyan-500',
-      show: canEnterScores,
-    },
-    {
-      title: 'Result Summary',
-      description: 'View comprehensive result summaries by class or student',
-      icon: FileText,
-      path: '/dashboard/results/summary',
-      color: 'bg-green-500',
-      show: canViewAllResults,
+      show: isFormTeacher,
     },
     {
       title: 'Result Approval',
-      description: 'Review and approve results before publishing',
+      description: 'Review compiled results, add principal remarks and signature, then approve for publication',
       icon: CheckCircle,
       path: '/dashboard/results/approval',
       color: 'bg-purple-500',

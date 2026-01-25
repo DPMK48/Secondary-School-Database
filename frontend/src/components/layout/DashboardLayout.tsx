@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
+import ImpersonationBanner from './ImpersonationBanner';
 import { cn } from '../../utils/helpers';
 
 const DashboardLayout: React.FC = () => {
@@ -32,6 +33,9 @@ const DashboardLayout: React.FC = () => {
           sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'
         )}
       >
+        {/* Impersonation Banner */}
+        <ImpersonationBanner />
+        
         {/* Navbar */}
         <Navbar
           onMenuClick={() => setMobileSidebarOpen(true)}

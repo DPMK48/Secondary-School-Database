@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle, Info, XCircle, X } from 'lucide-react';
 
 interface AlertProps {
   children: React.ReactNode;
-  variant?: 'info' | 'success' | 'warning' | 'error';
+  variant?: 'info' | 'success' | 'warning' | 'error' | 'danger';
   title?: string;
   onClose?: () => void;
   className?: string;
@@ -37,6 +37,12 @@ const Alert: React.FC<AlertProps> = ({
       content: 'text-yellow-700',
     },
     error: {
+      container: 'bg-red-50 border-red-200',
+      icon: <XCircle className="h-5 w-5 text-red-500" />,
+      title: 'text-red-800',
+      content: 'text-red-700',
+    },
+    danger: {
       container: 'bg-red-50 border-red-200',
       icon: <XCircle className="h-5 w-5 text-red-500" />,
       title: 'text-red-800',

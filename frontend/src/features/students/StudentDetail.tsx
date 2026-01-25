@@ -1,40 +1,158 @@
 import React, { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Avatar, Table } from '../../components/common';
-import { mockStudents, mockClasses, getClassDisplayName, generateStudentResultSummary, generateMockAttendance } from '../../utils/mockData';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Avatar, Table, Spinner, Alert } from '../../components/common';
+import { getClassDisplayName } from '../../utils/mockData';
 import { getFullName, formatDate, getPositionSuffix } from '../../utils/helpers';
 import { STATUS_COLORS, GRADE_COLORS } from '../../utils/constants';
-import type { SubjectScore } from '../../types';
+import type { SubjectScore, Student } from '../../types';
 import { ArrowLeft, Edit, FileText, Phone, Calendar, MapPin, User } from 'lucide-react';
 import StudentForm from './StudentForm';
+import { useStudentQuery } from '../../hooks/useStudents';
+import { useClassQuery } from '../../hooks/useClasses';
+import { useCurrentSession, useCurrentTerm } from '../../hooks/useSessionTerm';
+import { studentsApi } from './students.api';
+import { useQuery } from '@tanstack/react-query';
 
 const StudentDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [showFormModal, setShowFormModal] = useState(false);
+  const studentId = parseInt(id || '0');
 
-  const student = useMemo(() => {
-    return mockStudents.find((s) => s.id === parseInt(id || '0'));
-  }, [id]);
+  // Fetch student data from API
+  const { data: studentResponse, isLoading: studentLoading, error: studentError } = useStudentQuery(studentId, {
+    enabled: !!studentId,
+  });
 
-  const studentClass = useMemo(() => {
-    if (!student) return null;
-    return mockClasses.find((c) => c.id === student.current_class_id);
-  }, [student]);
+  // Get the student data - handle both snake_case and camelCase
+  const student: Student | null = useMemo(() => {
+    const data = studentResponse?.data;
+    if (!data) return null;
+    
+    // Normalize the data to snake_case for display
+    return {
+      id: data.id,
+      admission_no: data.admission_no || data.admissionNo,
+      first_name: data.first_name || data.firstName,
+      last_name: data.last_name || data.lastName,
+      gender: data.gender,
+      date_of_birth: data.date_of_birth || data.dateOfBirth,
+      current_class_id: data.current_class_id || data.currentClassId,
+      status: data.status,
+      guardian_name: data.guardian_name || data.guardianName,
+      guardian_phone: data.guardian_phone || data.guardianPhone,
+      address: data.address,
+      currentClass: data.currentClass,
+    } as Student;
+  }, [studentResponse]);
 
+  const classId = student?.current_class_id || student?.currentClassId;
+
+  // Fetch class data
+  const { data: classResponse } = useClassQuery(classId || 0, {
+    enabled: !!classId,
+  });
+
+  const studentClass = classResponse?.data || student?.currentClass || null;
+
+  // Fetch current session and term
+  const { data: currentSession } = useCurrentSession();
+  const { data: currentTerm } = useCurrentTerm();
+
+  // Fetch student results
+  const { data: resultsResponse } = useQuery({
+    queryKey: ['student-results', studentId, currentTerm?.id, currentSession?.id],
+    queryFn: () => studentsApi.getResults(studentId, { 
+      term_id: currentTerm?.id, 
+      session_id: currentSession?.id 
+    }),
+    enabled: !!studentId && !!currentTerm?.id && !!currentSession?.id,
+  });
+
+  // Fetch student attendance
+  const { data: attendanceResponse } = useQuery({
+    queryKey: ['student-attendance', studentId, currentTerm?.id, currentSession?.id],
+    queryFn: () => studentsApi.getAttendance(studentId, {
+      term_id: currentTerm?.id,
+      session_id: currentSession?.id,
+    }),
+    enabled: !!studentId && !!currentTerm?.id && !!currentSession?.id,
+  });
+
+  // Process results data
   const resultSummary = useMemo(() => {
-    if (!student) return null;
-    return generateStudentResultSummary(student);
-  }, [student]);
+    const results = resultsResponse?.data;
+    if (!results || !Array.isArray(results) || results.length === 0) {
+      return null;
+    }
 
+    // Calculate totals from results
+    const subjects = results.map((r: any) => ({
+      subject_id: r.subject?.id || r.subjectId,
+      subject_name: r.subject?.subjectName || r.subject_name || 'Unknown Subject',
+      test1: r.test1 || r.ca1 || 0,
+      test2: r.test2 || r.ca2 || 0,
+      test3: r.test3 || r.ca3 || 0,
+      exam: r.exam || r.examScore || 0,
+      total: r.total || (r.test1 || 0) + (r.test2 || 0) + (r.test3 || 0) + (r.exam || 0),
+      grade: r.grade || 'N/A',
+      remark: r.remark || '',
+    }));
+
+    const total_score = subjects.reduce((sum: number, s: any) => sum + (s.total || 0), 0);
+    const average = subjects.length > 0 ? Math.round(total_score / subjects.length) : 0;
+    
+    // Calculate grade from average
+    let grade = 'F';
+    if (average >= 70) grade = 'A';
+    else if (average >= 60) grade = 'B';
+    else if (average >= 50) grade = 'C';
+    else if (average >= 45) grade = 'D';
+    else if (average >= 40) grade = 'E';
+
+    return {
+      total_score,
+      average,
+      grade,
+      position: 1, // Position would need to be calculated on backend
+      subjects,
+      term: currentTerm || { termName: 'Current Term' },
+      session: currentSession || { sessionName: 'Current Session' },
+    };
+  }, [resultsResponse, currentSession, currentTerm]);
+
+  // Process attendance data
   const attendance = useMemo(() => {
-    if (!student) return null;
-    const records = generateMockAttendance(student.id, student.current_class_id, '2024-01');
-    const days_present = records.filter(r => r.status === 'present').length;
-    const days_absent = records.filter(r => r.status === 'absent').length;
+    const records = attendanceResponse?.data;
+    if (!records || !Array.isArray(records)) {
+      return { days_present: 0, days_absent: 0, total_days: 0 };
+    }
+
+    const days_present = records.filter((r: any) => r.status === 'present' || r.status === 'Present').length;
+    const days_absent = records.filter((r: any) => r.status === 'absent' || r.status === 'Absent').length;
     const total_days = records.length;
-    return { records, days_present, days_absent, total_days };
-  }, [student]);
+
+    return { days_present, days_absent, total_days };
+  }, [attendanceResponse]);
+
+  if (studentLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (studentError) {
+    return (
+      <div className="space-y-4">
+        <Alert variant="error">Failed to load student details. Please try again.</Alert>
+        <Button variant="outline" onClick={() => navigate('/dashboard/students')} className="mt-4">
+          Go back to Students
+        </Button>
+      </div>
+    );
+  }
 
   if (!student) {
     return (
@@ -218,7 +336,7 @@ const StudentDetail: React.FC = () => {
       <Card>
         <CardHeader>
           <CardTitle>
-            Academic Results - {resultSummary?.term.term_name} ({resultSummary?.session.session_name})
+            Academic Results - {resultSummary?.term?.termName || resultSummary?.term?.term_name || 'Current Term'} ({resultSummary?.session?.sessionName || resultSummary?.session?.session_name || 'Current Session'})
           </CardTitle>
         </CardHeader>
         <div className="overflow-x-auto">

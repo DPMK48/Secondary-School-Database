@@ -1,13 +1,14 @@
 // User & Authentication Types
-export type UserRole = 'admin' | 'form_teacher' | 'subject_teacher';
+export type UserRole = 'Admin' | 'Form Teacher' | 'Subject Teacher';
 
 export interface User {
   id: number;
   username: string;
-  email: string;
-  role: UserRole;
-  is_active: boolean;
-  created_at: string;
+  role: UserRole; // Role name from backend (e.g., 'Admin', 'Form Teacher', 'Subject Teacher')
+  email?: string; // Optional email field
+  mustChangePassword?: boolean;
+  teacherId?: number; // Teacher ID if user is a teacher
+  studentId?: number; // Student ID if user is a student
 }
 
 export interface AuthState {
@@ -25,7 +26,7 @@ export interface LoginCredentials {
 export interface AuthResponse {
   user: User;
   access_token: string;
-  token_type: string;
+  refresh_token: string;
 }
 
 // Role Type
@@ -37,7 +38,7 @@ export interface Role {
 // Teacher Types
 export interface Teacher {
   id: number;
-  user_id: number;
+  user_id?: number; // Optional - only set after credentials generated
   first_name: string;
   last_name: string;
   phone: string;
@@ -48,6 +49,9 @@ export interface Teacher {
   status?: string;
   subjects?: Subject[];
   classes?: Class[];
+  has_credentials?: boolean; // Track if login credentials exist
+  is_form_teacher?: boolean; // Track if assigned as form teacher
+  is_subject_teacher?: boolean; // Track if assigned as subject teacher
 }
 
 export interface TeacherSubjectClass {
@@ -66,16 +70,24 @@ export type Gender = 'Male' | 'Female';
 
 export interface Student {
   id: number;
-  admission_no: string;
-  first_name: string;
-  last_name: string;
+  student_id?: number; // Alias for compatibility
+  admission_no?: string; // snake_case from forms
+  admissionNo?: string; // camelCase from backend
+  first_name?: string; // snake_case from forms
+  firstName?: string; // camelCase from backend
+  last_name?: string; // snake_case from forms
+  lastName?: string; // camelCase from backend
   gender: Gender;
-  date_of_birth: string;
-  current_class_id: number;
+  date_of_birth?: string; // snake_case from forms
+  dateOfBirth?: string; // camelCase from backend
+  current_class_id?: number; // snake_case from forms
+  currentClassId?: number; // camelCase from backend
   status: StudentStatus;
-  current_class?: Class;
-  guardian_name?: string;
-  guardian_phone?: string;
+  currentClass?: Class; // Updated to match backend response
+  guardian_name?: string; // snake_case from forms
+  guardianName?: string; // camelCase from backend
+  guardian_phone?: string; // snake_case from forms
+  guardianPhone?: string; // camelCase from backend
   address?: string;
 }
 
@@ -85,7 +97,8 @@ export type ClassArm = 'A' | 'B' | 'C' | 'D';
 
 export interface Class {
   id: number;
-  class_name: string;
+  class_name?: string; // From database column
+  className?: string;  // From backend DTO
   arm: ClassArm;
   level: ClassLevel;
   students_count?: number;
@@ -103,9 +116,11 @@ export interface ClassSubject {
 // Subject Types
 export interface Subject {
   id: number;
-  subject_name: string;
-  subject_code: string;
+  subjectName: string;
+  subjectCode: string;
   level?: ClassLevel;
+  subject_name?: string; // Alias for backward compatibility
+  subject_code?: string; // Alias for backward compatibility
 }
 
 // Academic Session & Term Types
@@ -245,8 +260,8 @@ export interface PaginatedResponse<T> {
   data: T[];
   total: number;
   page: number;
-  per_page: number;
-  total_pages: number;
+  perPage: number;
+  totalPages: number;
 }
 
 // Dashboard Stats

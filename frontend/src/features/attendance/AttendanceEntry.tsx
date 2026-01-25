@@ -13,14 +13,15 @@ import {
   Spinner,
 } from '../../components/common';
 import {
-  mockStudents,
-  mockClasses,
   getClassDisplayName,
 } from '../../utils/mockData';
 import { getFullName, formatDate, cn } from '../../utils/helpers';
 import { Save, Calendar, CheckCircle, XCircle, Users, Check } from 'lucide-react';
-// import { attendanceApi } from './attendance.api';
 import { useRole } from '../../hooks/useRole';
+import { useClassesQuery, useClassStudentsQuery } from '../../hooks/useClasses';
+import { useAttendanceByDateQuery, useBulkAttendanceMutation } from '../../hooks/useAttendance';
+import { useSessionTerm } from '../../hooks/useSessionTerm';
+import type { Student } from '../../types';
 
 type AttendanceStatus = 'Present' | 'Absent';
 
@@ -32,36 +33,71 @@ interface AttendanceRecord {
 const AttendanceEntry: React.FC = () => {
   const today = new Date().toISOString().split('T')[0];
   const { isFormTeacher } = useRole();
+  const { currentSession, currentTerm } = useSessionTerm();
 
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedDate, setSelectedDate] = useState(today);
   const [attendance, setAttendance] = useState<{ [studentId: number]: AttendanceRecord }>({});
   const [isSaved, setIsSaved] = useState(false);
-  const [isLoading, _setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Get students in selected class
-  const classStudents = useMemo(() => {
-    if (!selectedClass) return [];
-    const classId = parseInt(selectedClass);
-    return mockStudents.filter((s) => s.current_class_id === classId && s.status === 'Active');
-  }, [selectedClass]);
+  // Fetch classes
+  const { data: classesData, isLoading: isLoadingClasses } = useClassesQuery({ page: 1, perPage: 100 });
+  const classes = classesData?.data || [];
 
-  // Initialize attendance when class/date changes
+  // Fetch students for selected class
+  const { data: studentsData, isLoading: isLoadingStudents } = useClassStudentsQuery(
+    parseInt(selectedClass) || 0,
+    { enabled: !!selectedClass }
+  );
+  const classStudents: Student[] = studentsData?.data || [];
+
+  // Fetch existing attendance for the selected class and date
+  const { data: existingAttendance, isLoading: isLoadingAttendance } = useAttendanceByDateQuery(
+    parseInt(selectedClass) || 0,
+    selectedDate,
+    { enabled: !!selectedClass && !!selectedDate }
+  );
+
+  // Bulk attendance mutation
+  const bulkAttendanceMutation = useBulkAttendanceMutation();
+
+  const isLoading = isLoadingClasses || isLoadingStudents || isLoadingAttendance;
+
+  // Initialize attendance when class/date changes or existing attendance loads
   useEffect(() => {
     if (selectedClass && selectedDate && classStudents.length > 0) {
       initializeAttendance();
     }
-  }, [selectedClass, selectedDate, classStudents.length]);
+  }, [selectedClass, selectedDate, classStudents.length, existingAttendance]);
 
   const initializeAttendance = () => {
     if (classStudents.length > 0) {
       const initialAttendance: { [studentId: number]: AttendanceRecord } = {};
-      classStudents.forEach((student) => {
-        initialAttendance[student.id] = { student_id: student.id, status: 'Present' };
-      });
+      
+      // If we have existing attendance for this date, use it
+      if (existingAttendance?.data && Array.isArray(existingAttendance.data)) {
+        existingAttendance.data.forEach((record: any) => {
+          initialAttendance[record.studentId] = {
+            student_id: record.studentId,
+            status: record.status === 'Present' ? 'Present' : 'Absent',
+          };
+        });
+        // Fill in missing students as Present
+        classStudents.forEach((student) => {
+          if (!initialAttendance[student.id]) {
+            initialAttendance[student.id] = { student_id: student.id, status: 'Present' };
+          }
+        });
+      } else {
+        // No existing attendance, default all to Present
+        classStudents.forEach((student) => {
+          initialAttendance[student.id] = { student_id: student.id, status: 'Present' };
+        });
+      }
+      
       setAttendance(initialAttendance);
       setIsSaved(false);
     }
@@ -78,31 +114,30 @@ const AttendanceEntry: React.FC = () => {
   };
 
   const handleSave = async () => {
+    if (!currentSession?.id || !currentTerm?.id) {
+      setError('No current session or term set. Please configure them in settings.');
+      return;
+    }
+
     setIsSaving(true);
     setError(null);
     setSuccessMessage(null);
 
     try {
       const records = Object.values(attendance);
+      const classId = parseInt(selectedClass);
 
-      // Simulate saving (remove this and use real API when backend is ready)
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // TODO: Uncomment when backend API is ready
-      // const classId = parseInt(selectedClass);
-      // const sessionId = 1;
-      // const termId = 1;
-      // const bulkData = {
-      //   class_id: classId,
-      //   date: selectedDate,
-      //   session_id: sessionId,
-      //   term_id: termId,
-      //   records: records.map((r) => ({
-      //     student_id: r.student_id,
-      //     status: r.status,
-      //   })),
-      // };
-      // const response = await attendanceApi.bulkCreate(bulkData);
+      const bulkData = {
+        classId: classId,
+        date: selectedDate,
+        sessionId: currentSession.id,
+        termId: currentTerm.id,
+        attendances: records.map((r) => ({
+          studentId: r.student_id,
+          status: r.status,
+        })),
+      };
+      await bulkAttendanceMutation.mutateAsync(bulkData);
 
       setIsSaved(true);
       setSuccessMessage(`Attendance saved successfully for ${records.length} students`);
@@ -110,7 +145,7 @@ const AttendanceEntry: React.FC = () => {
       setTimeout(() => setSuccessMessage(null), 5000);
     } catch (err: any) {
       console.error('Error saving attendance:', err);
-      setError('Failed to save attendance. Please try again.');
+      setError(err?.response?.data?.message || 'Failed to save attendance. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -138,7 +173,7 @@ const AttendanceEntry: React.FC = () => {
     setSuccessMessage(null);
   };
 
-  const classOptions = mockClasses.map((c) => ({
+  const classOptions = classes.map((c) => ({
     value: c.id.toString(),
     label: getClassDisplayName(c),
   }));
@@ -152,6 +187,16 @@ const AttendanceEntry: React.FC = () => {
     };
   }, [attendance]);
 
+  // Helper function to get student name - handle both camelCase and snake_case
+  const getStudentName = (student: Student) => {
+    const firstName = student.firstName || student.first_name || '';
+    const lastName = student.lastName || student.last_name || '';
+    return getFullName(firstName, lastName);
+  };
+
+  const getStudentAdmissionNo = (student: Student) => {
+    return student.admissionNo || student.admission_no || 'N/A';
+  };
   const StatusButton: React.FC<{
     status: AttendanceStatus;
     currentStatus: AttendanceStatus;
@@ -179,21 +224,21 @@ const AttendanceEntry: React.FC = () => {
     {
       key: 'sn',
       label: 'S/N',
-      render: (_value: unknown, _row: (typeof mockStudents)[0], index?: number) => (
+      render: (_value: unknown, _row: Student, index?: number) => (
         <span className="text-secondary-500">{(index || 0) + 1}</span>
       ),
     },
     {
       key: 'student',
       label: 'Student',
-      render: (_value: unknown, row: (typeof mockStudents)[0]) => (
+      render: (_value: unknown, row: Student) => (
         <div className="flex items-center gap-3">
-          <Avatar name={getFullName(row.first_name, row.last_name)} size="sm" />
+          <Avatar name={getStudentName(row)} size="sm" />
           <div>
             <p className="font-medium text-secondary-900">
-              {getFullName(row.first_name, row.last_name)}
+              {getStudentName(row)}
             </p>
-            <p className="text-xs text-secondary-500">{row.admission_no}</p>
+            <p className="text-xs text-secondary-500">{getStudentAdmissionNo(row)}</p>
           </div>
         </div>
       ),
@@ -201,7 +246,7 @@ const AttendanceEntry: React.FC = () => {
     {
       key: 'gender',
       label: 'Gender',
-      render: (_value: unknown, row: (typeof mockStudents)[0]) => (
+      render: (_value: unknown, row: Student) => (
         <Badge variant={row.gender === 'Male' ? 'info' : 'secondary'} size="sm">
           {row.gender}
         </Badge>
@@ -210,7 +255,7 @@ const AttendanceEntry: React.FC = () => {
     {
       key: 'status',
       label: 'Attendance Status',
-      render: (_value: unknown, row: (typeof mockStudents)[0]) => {
+      render: (_value: unknown, row: Student) => {
         const record = attendance[row.id];
         const currentStatus = record?.status || 'Present';
         

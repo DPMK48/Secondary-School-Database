@@ -305,7 +305,10 @@ export function getStudentsByClass(classId: number): Student[] {
 
 // Helper to get class display name
 export function getClassDisplayName(classObj: Class): string {
-  return `${classObj.class_name} ${classObj.arm}`;
+  if (!classObj) return 'N/A';
+  const name = (classObj as any).className || classObj.class_name || '';
+  const arm = classObj.arm || '';
+  return `${name} ${arm}`.trim();
 }
 
 // Helper to generate class result summary
