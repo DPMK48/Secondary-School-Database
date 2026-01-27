@@ -9,6 +9,8 @@ export interface User {
   mustChangePassword?: boolean;
   teacherId?: number; // Teacher ID if user is a teacher
   studentId?: number; // Student ID if user is a student
+  formTeacherClassId?: number; // Class ID if user is a form teacher
+  formTeacherClassName?: string; // Class name if user is a form teacher
 }
 
 export interface AuthState {
@@ -21,12 +23,15 @@ export interface AuthState {
 export interface LoginCredentials {
   username: string;
   password: string;
+  selectedRole?: 'Subject Teacher' | 'Form Teacher';
 }
 
 export interface AuthResponse {
   user: User;
-  access_token: string;
-  refresh_token: string;
+  access_token: string | null;
+  refresh_token: string | null;
+  requiresRoleSelection?: boolean;
+  availableRoles?: string[];
 }
 
 // Role Type

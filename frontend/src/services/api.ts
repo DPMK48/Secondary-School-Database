@@ -65,6 +65,7 @@ export const teachersApi = {
   update: (id: number, data: Partial<Teacher>) => put<Teacher>(`/teachers/${id}`, data),
   delete: (id: number) => del<void>(`/teachers/${id}`),
   getAssignments: (id: number) => get<TeacherSubjectClass[]>(`/teachers/${id}/assignments`),
+  resetPassword: (userId: number) => post<{ newPassword: string }>(`/users/${userId}/reset-password`),
 };
 
 // Classes API

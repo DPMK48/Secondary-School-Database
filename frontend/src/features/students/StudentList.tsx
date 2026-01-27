@@ -7,7 +7,7 @@ import { mockClasses, getClassDisplayName } from '../../utils/mockData';
 import { getFullName, formatDate } from '../../utils/helpers';
 import { STATUS_COLORS } from '../../utils/constants';
 import type { Student } from '../../types';
-import { Search, Plus, Download, Eye, Edit, Trash2, Users, FileSpreadsheet, FileText } from 'lucide-react';
+import { Search, Plus, Download, Eye, Trash2, Users, FileSpreadsheet, FileText } from 'lucide-react';
 import StudentForm from './StudentForm';
 import { useStudentsQuery, useDeleteStudentMutation } from '../../hooks/useStudents';
 import { useClassesQuery } from '../../hooks/useClasses';
@@ -251,22 +251,13 @@ const StudentList: React.FC = () => {
             <Eye className="h-4 w-4" />
           </button>
           {canManageStudents && (
-            <>
-              <button
-                onClick={() => handleEdit(student)}
-                className="p-2 text-secondary-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                title="Edit"
-              >
-                <Edit className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => handleDelete(student)}
-                className="p-2 text-secondary-500 hover:text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
-                title="Delete"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </>
+            <button
+              onClick={() => handleDelete(student)}
+              className="p-2 text-secondary-500 hover:text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
+              title="Delete"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
           )}
         </div>
       ),

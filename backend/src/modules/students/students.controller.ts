@@ -17,6 +17,7 @@ import { QueryStudentDto } from './dto/query-student.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('students')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -25,8 +26,11 @@ export class StudentsController {
 
   @Post()
   @Roles('Admin')
-  create(@Body() createStudentDto: CreateStudentDto) {
-    return this.studentsService.create(createStudentDto);
+  create(
+    @Body() createStudentDto: CreateStudentDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.studentsService.create(createStudentDto, user?.id, user?.role?.roleName || 'Admin');
   }
 
   @Get()
@@ -46,14 +50,18 @@ export class StudentsController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateStudentDto: UpdateStudentDto,
+    @CurrentUser() user: any,
   ) {
-    return this.studentsService.update(id, updateStudentDto);
+    return this.studentsService.update(id, updateStudentDto, user?.id, user?.role?.roleName || 'Admin');
   }
 
   @Delete(':id')
   @Roles('Admin')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.studentsService.remove(id);
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.studentsService.remove(id, user?.id, user?.role?.roleName || 'Admin');
   }
 
   @Get(':id/results')

@@ -7,13 +7,17 @@ import { User } from '../../entities/user.entity';
 import { Student } from '../../entities/student.entity';
 import { Teacher } from '../../entities/teacher.entity';
 import { Class } from '../../entities/class.entity';
+import { FormTeacher } from '../../entities/form-teacher.entity';
+import { TeacherSubjectClass } from '../../entities/teacher-subject-class.entity';
+import { AcademicSession } from '../../entities/academic-session.entity';
+import { Role } from '../../entities/role.entity';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Student, Teacher, Class]),
+    TypeOrmModule.forFeature([User, Student, Teacher, Class, FormTeacher, TeacherSubjectClass, AcademicSession, Role]),
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],

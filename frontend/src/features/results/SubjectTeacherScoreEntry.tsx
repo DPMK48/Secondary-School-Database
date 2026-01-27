@@ -151,14 +151,11 @@ const SubjectTeacherScoreEntry: React.FC = () => {
         
         studentResults.forEach((result: any) => {
           const assessmentId = result.assessment_id || result.assessmentId;
+          // 1st Test=1, 2nd Test=2, 3rd Test=3, Exam=4
           const assessmentName =
-            assessmentId === 1
-              ? 'test1'
-              : assessmentId === 2
-              ? 'test2'
-              : assessmentId === 3
-              ? 'test3'
-              : 'exam';
+            assessmentId === 1 ? 'test1' :
+            assessmentId === 2 ? 'test2' :
+            assessmentId === 3 ? 'test3' : 'exam';
           newScores[studentKey][assessmentName] = result.score;
           saved.add(`${studentKey}_${assessmentName}`);
         });
@@ -172,9 +169,9 @@ const SubjectTeacherScoreEntry: React.FC = () => {
   const handleScoreChange = (studentId: number, assessment: string, value: string) => {
     const numValue = parseFloat(value) || 0;
     const maxScore =
-      assessment === 'test1' || assessment === 'test2' || assessment === 'test3'
-        ? ASSESSMENT_TYPES.TEST1.max_score
-        : ASSESSMENT_TYPES.EXAM.max_score;
+      assessment === 'exam'
+        ? ASSESSMENT_TYPES.EXAM.max_score
+        : ASSESSMENT_TYPES.TEST1.max_score;
 
     const studentKey = `student_${studentId}`;
     setScores({
@@ -275,7 +272,7 @@ const SubjectTeacherScoreEntry: React.FC = () => {
     },
     {
       key: 'test1',
-      label: `Test 1 (/${ASSESSMENT_TYPES.TEST1.max_score})`,
+      label: `1st Test (/${ASSESSMENT_TYPES.TEST1.max_score})`,
       render: (_value: unknown, row: SubjectScoreEntry) => (
         <Input
           type="number"
@@ -283,14 +280,14 @@ const SubjectTeacherScoreEntry: React.FC = () => {
           max={ASSESSMENT_TYPES.TEST1.max_score}
           value={scores[`student_${row.student_id}`]?.test1 || ''}
           onChange={(e) => handleScoreChange(row.student_id, 'test1', e.target.value)}
-          className="w-20"
+          className="w-16"
           placeholder="0"
         />
       ),
     },
     {
       key: 'test2',
-      label: `Test 2 (/${ASSESSMENT_TYPES.TEST2.max_score})`,
+      label: `2nd Test (/${ASSESSMENT_TYPES.TEST2.max_score})`,
       render: (_value: unknown, row: SubjectScoreEntry) => (
         <Input
           type="number"
@@ -298,14 +295,14 @@ const SubjectTeacherScoreEntry: React.FC = () => {
           max={ASSESSMENT_TYPES.TEST2.max_score}
           value={scores[`student_${row.student_id}`]?.test2 || ''}
           onChange={(e) => handleScoreChange(row.student_id, 'test2', e.target.value)}
-          className="w-20"
+          className="w-16"
           placeholder="0"
         />
       ),
     },
     {
       key: 'test3',
-      label: `Test 3 (/${ASSESSMENT_TYPES.TEST3.max_score})`,
+      label: `3rd Test (/${ASSESSMENT_TYPES.TEST3.max_score})`,
       render: (_value: unknown, row: SubjectScoreEntry) => (
         <Input
           type="number"
@@ -313,7 +310,7 @@ const SubjectTeacherScoreEntry: React.FC = () => {
           max={ASSESSMENT_TYPES.TEST3.max_score}
           value={scores[`student_${row.student_id}`]?.test3 || ''}
           onChange={(e) => handleScoreChange(row.student_id, 'test3', e.target.value)}
-          className="w-20"
+          className="w-16"
           placeholder="0"
         />
       ),
@@ -328,7 +325,7 @@ const SubjectTeacherScoreEntry: React.FC = () => {
           max={ASSESSMENT_TYPES.EXAM.max_score}
           value={scores[`student_${row.student_id}`]?.exam || ''}
           onChange={(e) => handleScoreChange(row.student_id, 'exam', e.target.value)}
-          className="w-20"
+          className="w-16"
           placeholder="0"
         />
       ),

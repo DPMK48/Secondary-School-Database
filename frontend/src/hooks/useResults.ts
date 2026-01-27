@@ -130,9 +130,10 @@ export const useFormTeacherCompilationQuery = (
       });
       return response.data;
     },
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnMount: true, // Refetch when component mounts to get latest scores
+    refetchOnWindowFocus: true, // Refetch when user focuses the window (tabs back)
+    refetchOnReconnect: true, // Refetch when network reconnects
+    staleTime: 30000, // Consider data stale after 30 seconds
     enabled: options?.enabled !== false && !!classId,
   });
 };

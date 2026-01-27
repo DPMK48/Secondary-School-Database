@@ -7,7 +7,7 @@ import { Dashboard } from '../features/dashboard';
 import { StudentList, StudentDetail } from '../features/students';
 import { TeacherList, TeacherDetail, AssignSubjects } from '../features/teachers';
 import { ClassList, ClassStudents } from '../features/classes';
-import { SubjectList } from '../features/subjects';
+import { SubjectList, MySubjects } from '../features/subjects';
 import { ScoreEntry, ResultSummary, ResultApproval, ResultsHub, SubjectTeacherScoreEntry, FormTeacherResultCompilation } from '../features/results';
 import { AttendanceEntry, AttendanceView, AttendanceRouter } from '../features/attendance';
 import { StudentReport, ClassReport, ReportsHub } from '../features/reports';
@@ -100,6 +100,14 @@ const AppRoutes: React.FC = () => {
           element={
             <RoleGuard allowedRoles={['Admin']}>
               <SubjectList />
+            </RoleGuard>
+          }
+        />
+        <Route
+          path="my-subjects"
+          element={
+            <RoleGuard allowedRoles={['Subject Teacher', 'Form Teacher']}>
+              <MySubjects />
             </RoleGuard>
           }
         />

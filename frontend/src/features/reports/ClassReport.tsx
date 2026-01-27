@@ -30,8 +30,8 @@ const ClassReport: React.FC = () => {
   // Fetch session and term data from backend
   const { data: currentSession } = useCurrentSession();
   const { data: currentTerm } = useCurrentTerm();
-  const { data: sessionsResponse } = useSessions();
-  const { data: termsResponse } = useTerms();
+  const { data: sessions } = useSessions();
+  const { data: terms } = useTerms();
   
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSession, setSelectedSession] = useState('');
@@ -165,20 +165,20 @@ const ClassReport: React.FC = () => {
   }));
 
   const sessionOptions = useMemo(() => {
-    if (!sessionsResponse?.data) return [];
-    return sessionsResponse.data.map((s: any) => ({ 
+    if (!sessions || !Array.isArray(sessions)) return [];
+    return sessions.map((s: any) => ({ 
       value: s.id.toString(), 
       label: s.sessionName 
     }));
-  }, [sessionsResponse]);
+  }, [sessions]);
   
   const termOptions = useMemo(() => {
-    if (!termsResponse?.data) return [];
-    return termsResponse.data.map((t: any) => ({ 
+    if (!terms || !Array.isArray(terms)) return [];
+    return terms.map((t: any) => ({ 
       value: t.id.toString(), 
       label: t.termName 
     }));
-  }, [termsResponse]);
+  }, [terms]);
 
   const getPositionSuffix = (pos: number) => {
     if (pos === 11 || pos === 12 || pos === 13) return 'th';

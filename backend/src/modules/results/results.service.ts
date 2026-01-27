@@ -16,6 +16,8 @@ import {
   GRADING_SYSTEM_AF,
   GRADING_SYSTEM_PERCENTAGE 
 } from '../../utils/grading.util';
+import { ActivitiesService } from '../activities/activities.service';
+import { ActivityType } from '../../entities/activity.entity';
 
 @Injectable()
 export class ResultsService {
@@ -24,6 +26,7 @@ export class ResultsService {
     private readonly resultRepository: Repository<Result>,
     @InjectRepository(Assessment)
     private readonly assessmentRepository: Repository<Assessment>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
   async create(createResultDto: CreateResultDto) {
@@ -110,6 +113,16 @@ export class ResultsService {
     }
 
     const saved = await this.resultRepository.save(records);
+
+    // Log activity
+    await this.activitiesService.logActivity(
+      ActivityType.RESULT_ENTERED,
+      'Results Entered',
+      `Scores for ${saved.length} students were entered`,
+      teacherId,
+      'Subject Teacher',
+      { subjectId, classId, assessmentId, count: saved.length },
+    );
 
     return {
       success: true,

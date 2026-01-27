@@ -5,11 +5,19 @@ import { Button, Input, Alert } from '../../components/common';
 import { APP_NAME } from '../../utils/constants';
 import { GraduationCap, Eye, EyeOff, User, Lock } from 'lucide-react';
 import api from '../../services/axios';
+import RoleSelectionModal from './RoleSelectionModal';
+import { authApi } from './auth.api';
 
 interface PublicStats {
   students: number;
   teachers: number;
   classes: number;
+}
+
+interface RoleSelectionState {
+  isOpen: boolean;
+  availableRoles: string[];
+  formTeacherClassName: string | null;
 }
 
 const Login: React.FC = () => {
@@ -23,6 +31,12 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [stats, setStats] = useState<PublicStats>({ students: 0, teachers: 0, classes: 0 });
+  const [roleSelection, setRoleSelection] = useState<RoleSelectionState>({
+    isOpen: false,
+    availableRoles: [],
+    formTeacherClassName: null,
+  });
+  const [isSelectingRole, setIsSelectingRole] = useState(false);
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
 
@@ -56,15 +70,61 @@ const Login: React.FC = () => {
     }
 
     try {
-      await login({ username, password });
-      navigate(from, { replace: true });
+      // First, check if role selection is needed
+      const response = await authApi.login({ username, password });
+      
+      if (response.requiresRoleSelection && response.availableRoles && response.availableRoles.length > 1) {
+        // Show role selection modal
+        setRoleSelection({
+          isOpen: true,
+          availableRoles: response.availableRoles,
+          formTeacherClassName: response.user?.formTeacherClassName || null,
+        });
+      } else {
+        // Single role or no selection needed - proceed with login
+        await login({ username, password });
+        navigate(from, { replace: true });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     }
   };
 
+  const handleRoleSelect = async (selectedRole: 'Subject Teacher' | 'Form Teacher') => {
+    setIsSelectingRole(true);
+    setError('');
+    
+    try {
+      // Login with selected role
+      await login({ username, password, selectedRole });
+      setRoleSelection({ isOpen: false, availableRoles: [], formTeacherClassName: null });
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed');
+      setRoleSelection({ isOpen: false, availableRoles: [], formTeacherClassName: null });
+    } finally {
+      setIsSelectingRole(false);
+    }
+  };
+
+  const handleCancelRoleSelection = () => {
+    setRoleSelection({ isOpen: false, availableRoles: [], formTeacherClassName: null });
+    setUsername('');
+    setPassword('');
+  };
+
   return (
     <div className="min-h-screen flex">
+      {/* Role Selection Modal */}
+      <RoleSelectionModal
+        isOpen={roleSelection.isOpen}
+        availableRoles={roleSelection.availableRoles}
+        formTeacherClassName={roleSelection.formTeacherClassName}
+        onSelectRole={handleRoleSelect}
+        onCancel={handleCancelRoleSelection}
+        isLoading={isSelectingRole}
+      />
+
       {/* Left side - Login form */}
       <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 bg-white">
         <div className="w-full max-w-md">
@@ -165,12 +225,10 @@ const Login: React.FC = () => {
             <GraduationCap className="h-24 w-24 mx-auto opacity-90" />
           </div>
           <h2 className="text-3xl font-bold mb-4">
-            School Result Management System
+            Armburu Model School Management System
           </h2>
           <p className="text-lg text-primary-100 mb-8">
-            Streamline your school's result management process with our comprehensive
-            platform. Track student performance, manage assessments, and generate
-            reports effortlessly.
+            Manage student results, attendance, and academic records efficiently and effectively.
           </p>
           <div className="grid grid-cols-3 gap-6 text-center">
             <div className="p-4 bg-white/10 rounded-xl backdrop-blur-sm">

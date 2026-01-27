@@ -31,6 +31,13 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const response = await authApi.login(credentials);
           
+          // Check if role selection is required (no token returned)
+          if (response.requiresRoleSelection || !response.access_token) {
+            set({ isLoading: false });
+            // Don't complete login - caller should handle role selection
+            return;
+          }
+          
           // Store token and user info
           localStorage.setItem(STORAGE_KEYS.TOKEN, response.access_token);
           localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(response.user));

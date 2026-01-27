@@ -12,15 +12,18 @@ import { UpdateStudentDto } from './dto/update-student.dto';
 import { QueryStudentDto } from './dto/query-student.dto';
 import { generateAdmissionNo } from '../../utils/generators.util';
 import { paginate } from '../../common/helpers/pagination.helper';
+import { ActivitiesService } from '../activities/activities.service';
+import { ActivityType } from '../../entities/activity.entity';
 
 @Injectable()
 export class StudentsService {
   constructor(
     @InjectRepository(Student)
     private readonly studentRepository: Repository<Student>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
-  async create(createStudentDto: CreateStudentDto) {
+  async create(createStudentDto: CreateStudentDto, userId?: number, userRole?: string) {
     // Generate admission number if not provided
     if (!createStudentDto.admissionNo) {
       createStudentDto.admissionNo = await this.generateUniqueAdmissionNo();
@@ -36,6 +39,16 @@ export class StudentsService {
 
     const student = this.studentRepository.create(createStudentDto);
     const saved = await this.studentRepository.save(student);
+
+    // Log activity
+    await this.activitiesService.logActivity(
+      ActivityType.STUDENT_ADDED,
+      'New Student Added',
+      `${saved.firstName} ${saved.lastName} (${saved.admissionNo}) was added`,
+      userId,
+      userRole || 'Admin',
+      { studentId: saved.id, admissionNo: saved.admissionNo },
+    );
 
     return {
       success: true,
@@ -99,15 +112,26 @@ export class StudentsService {
     };
   }
 
-  async update(id: number, updateStudentDto: UpdateStudentDto) {
+  async update(id: number, updateStudentDto: UpdateStudentDto, userId?: number, userRole?: string) {
     const student = await this.studentRepository.findOne({ where: { id } });
 
     if (!student) {
       throw new NotFoundException(`Student with ID ${id} not found`);
     }
 
+    const oldName = `${student.firstName} ${student.lastName}`;
     Object.assign(student, updateStudentDto);
     const updated = await this.studentRepository.save(student);
+
+    // Log activity
+    await this.activitiesService.logActivity(
+      ActivityType.STUDENT_UPDATED,
+      'Student Updated',
+      `${updated.firstName} ${updated.lastName} (${updated.admissionNo}) was updated`,
+      userId,
+      userRole || 'Admin',
+      { studentId: updated.id, admissionNo: updated.admissionNo },
+    );
 
     return {
       success: true,
@@ -116,14 +140,27 @@ export class StudentsService {
     };
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId?: number, userRole?: string) {
     const student = await this.studentRepository.findOne({ where: { id } });
 
     if (!student) {
       throw new NotFoundException(`Student with ID ${id} not found`);
     }
 
+    const studentName = `${student.firstName} ${student.lastName}`;
+    const admissionNo = student.admissionNo;
+
     await this.studentRepository.remove(student);
+
+    // Log activity
+    await this.activitiesService.logActivity(
+      ActivityType.STUDENT_DELETED,
+      'Student Removed',
+      `${studentName} (${admissionNo}) was removed from the system`,
+      userId,
+      userRole || 'Admin',
+      { admissionNo },
+    );
 
     return {
       success: true,

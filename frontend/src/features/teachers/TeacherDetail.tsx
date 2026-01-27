@@ -28,10 +28,17 @@ import {
   Edit,
   LogIn,
   School,
+  Key,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
+  RefreshCw,
 } from 'lucide-react';
 import TeacherForm from './TeacherForm';
 import { useTeacherQuery, useTeacherAssignmentsQuery } from '../../hooks/useTeachers';
 import { useClassesQuery } from '../../hooks/useClasses';
+import { teachersApi } from '../../services/api';
 import type { Teacher } from '../../types';
 
 const TeacherDetail: React.FC = () => {
@@ -43,6 +50,11 @@ const TeacherDetail: React.FC = () => {
   const [showRoleSelectionModal, setShowRoleSelectionModal] = useState(false);
   const [showConfirmLoginModal, setShowConfirmLoginModal] = useState(false);
   const [pendingRole, setPendingRole] = useState<'Form Teacher' | 'Subject Teacher' | null>(null);
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
+  const [resetCredentials, setResetCredentials] = useState<{ password: string } | null>(null);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null);
 
   const teacherId = parseInt(id || '0');
 
@@ -137,6 +149,38 @@ const TeacherDetail: React.FC = () => {
     setShowRoleSelectionModal(true);
   };
 
+  const handleOpenCredentialsModal = () => {
+    setResetCredentials(null);
+    setShowPassword(false);
+    setCopiedField(null);
+    setShowCredentialsModal(true);
+  };
+
+  const handleResetPassword = async () => {
+    if (!teacher?.user_id) return;
+    
+    setIsResettingPassword(true);
+    try {
+      const result = await teachersApi.resetPassword(teacher.user_id);
+      setResetCredentials({ password: result.newPassword });
+      setShowPassword(true);
+    } catch (error) {
+      console.error('Failed to reset password:', error);
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
+  const handleCopy = async (text: string, field: 'username' | 'password') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
+  };
+
   const performImpersonation = (role: 'Form Teacher' | 'Subject Teacher') => {
     if (!teacher) return;
     
@@ -208,6 +252,13 @@ const TeacherDetail: React.FC = () => {
         </div>
         {canManageTeachers && (
           <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              leftIcon={<Key className="h-4 w-4" />} 
+              onClick={handleOpenCredentialsModal}
+            >
+              Credentials
+            </Button>
             <Button 
               variant="outline" 
               leftIcon={<LogIn className="h-4 w-4" />} 
@@ -487,7 +538,118 @@ const TeacherDetail: React.FC = () => {
             )}
           </div>
         </div>
-      </Modal>    </div>
+      </Modal>
+
+      {/* Credentials Modal */}
+      <Modal
+        isOpen={showCredentialsModal}
+        onClose={() => setShowCredentialsModal(false)}
+        title="Teacher Credentials"
+      >
+        <div className="space-y-4">
+          <Alert variant="info">
+            <p className="text-sm">
+              <strong>Note:</strong> Each teacher has <strong>one login account</strong> that works for all their roles 
+              (Subject Teacher and/or Form Teacher). Resetting the password updates their single account.
+            </p>
+          </Alert>
+
+          <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Teacher</label>
+              <p className="text-gray-900">{getFullName(teacher.first_name, teacher.last_name)}</p>
+            </div>
+
+            {/* Show current roles */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Current Roles</label>
+              <div className="flex flex-wrap gap-2">
+                {Object.keys(subjectAssignments).length > 0 && (
+                  <Badge variant="info">Subject Teacher</Badge>
+                )}
+                {formTeacherAssignment && (
+                  <Badge variant="primary">Form Teacher - {formTeacherAssignment.className} {formTeacherAssignment.arm}</Badge>
+                )}
+                {Object.keys(subjectAssignments).length === 0 && !formTeacherAssignment && (
+                  <span className="text-gray-500 text-sm italic">No roles assigned yet</span>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-white px-3 py-2 rounded border text-sm font-mono">
+                  {teacher.email.split('@')[0]}
+                </code>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopy(teacher.email.split('@')[0], 'username')}
+                >
+                  {copiedField === 'username' ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {resetCredentials ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-white px-3 py-2 rounded border text-sm font-mono">
+                    {showPassword ? resetCredentials.password : '••••••••'}
+                  </code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopy(resetCredentials.password, 'password')}
+                  >
+                    {copiedField === 'password' ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-orange-600 mt-2">
+                  ⚠️ Save this password now! It cannot be retrieved once you close this modal.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <p className="text-gray-500 text-sm italic">Password is encrypted and cannot be viewed</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-between items-center pt-4 border-t">
+            <Button
+              variant="outline"
+              leftIcon={<RefreshCw className={`h-4 w-4 ${isResettingPassword ? 'animate-spin' : ''}`} />}
+              onClick={handleResetPassword}
+              disabled={isResettingPassword}
+            >
+              {isResettingPassword ? 'Resetting...' : 'Reset Password'}
+            </Button>
+            <Button variant="primary" onClick={() => setShowCredentialsModal(false)}>
+              Close
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
   );
 };
 

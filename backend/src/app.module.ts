@@ -15,6 +15,7 @@ import { AttendanceModule } from './modules/attendance/attendance.module';
 import { ResultsModule } from './modules/results/results.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { HealthModule } from './modules/health/health.module';
+import { ActivitiesModule } from './modules/activities/activities.module';
 import * as path from 'path';
 
 @Module({
@@ -69,6 +70,7 @@ import * as path from 'path';
     ResultsModule,
     ReportsModule,
     HealthModule,
+    ActivitiesModule,
   ],
   controllers: [],
   providers: [],

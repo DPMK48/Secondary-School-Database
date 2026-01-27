@@ -16,6 +16,8 @@ import { QueryTeacherDto } from './dto/query-teacher.dto';
 import { AssignSubjectClassDto } from './dto/assign-subject-class.dto';
 import { generateStaffId, generateUsername, generatePassword } from '../../utils/generators.util';
 import { ROLES } from '../../utils/constants';
+import { ActivitiesService } from '../activities/activities.service';
+import { ActivityType } from '../../entities/activity.entity';
 
 @Injectable()
 export class TeachersService {
@@ -28,6 +30,7 @@ export class TeachersService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
   async create(createTeacherDto: CreateTeacherDto) {
@@ -99,6 +102,16 @@ export class TeachersService {
       where: { id: saved.id },
       relations: ['user', 'user.role'],
     });
+
+    // Log activity
+    await this.activitiesService.logActivity(
+      ActivityType.TEACHER_ADDED,
+      'New Teacher Added',
+      `${teacherData.firstName} ${teacherData.lastName} (${teacherData.staffId}) was added`,
+      undefined,
+      'Admin',
+      { teacherId: teacherData.id, staffId: teacherData.staffId },
+    );
 
     return {
       success: true,

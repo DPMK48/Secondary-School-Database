@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, MinLength } from 'class-validator';
+import { IsString, IsNotEmpty, MinLength, IsOptional, IsIn } from 'class-validator';
 
 export class LoginDto {
   @IsString()
@@ -9,6 +9,11 @@ export class LoginDto {
   @IsNotEmpty()
   @MinLength(6)
   password: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['Subject Teacher', 'Form Teacher'])
+  selectedRole?: string;
 }
 
 export class ChangePasswordDto {

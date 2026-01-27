@@ -13,7 +13,6 @@ import {
   Card,
   CardHeader,
   CardContent,
-  Table,
   Badge,
   Modal,
   Alert,
@@ -196,51 +195,6 @@ const SubjectList: React.FC = () => {
     { value: 'All', label: 'All Levels' },
   ];
 
-  const columns = [
-    {
-      key: 'subject',
-      label: 'Subject',
-      render: (_value: unknown, row: Subject) => (
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-primary-100 flex items-center justify-center">
-            <BookOpen className="h-5 w-5 text-primary-600" />
-          </div>
-          <div>
-            <p className="font-medium text-secondary-900">{row.subjectName}</p>
-            <p className="text-xs text-secondary-500">{row.subjectCode}</p>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'level',
-      label: 'Level',
-      render: (_value: unknown, row: Subject) => (
-        <Badge
-          variant={row.level === 'Senior' ? 'primary' : row.level === 'Junior' ? 'info' : 'secondary'}
-          size="sm"
-        >
-          {row.level || 'All Levels'}
-        </Badge>
-      ),
-    },
-    {
-      key: 'actions',
-      label: 'Actions',
-      render: (_value: unknown, row: Subject) =>
-        canManageSubjects ? (
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => handleEdit(row)}>
-              <Edit className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => handleDelete(row)}>
-              <Trash2 className="h-4 w-4 text-danger-500" />
-            </Button>
-          </div>
-        ) : null,
-    },
-  ];
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -278,9 +232,9 @@ const SubjectList: React.FC = () => {
         </Card>
       </div>
 
-      {/* Subjects Table */}
+      {/* Filters */}
       <Card>
-        <CardHeader>
+        <CardContent>
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
               <Input
@@ -290,31 +244,101 @@ const SubjectList: React.FC = () => {
                 leftIcon={<Search className="h-5 w-5" />}
               />
             </div>
-            <Select
-              options={levelOptions}
-              value={levelFilter}
-              onChange={setLevelFilter}
-              placeholder="All Levels"
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center py-8">
-              <Spinner size="lg" />
+            <div className="w-full md:w-48">
+              <Select
+                options={levelOptions}
+                value={levelFilter}
+                onChange={setLevelFilter}
+                placeholder="All Levels"
+              />
             </div>
-          ) : error ? (
-            <Alert variant="error">Failed to load subjects. Please try again.</Alert>
-          ) : (
-            <Table
-              columns={columns}
-              data={subjects}
-              keyExtractor={(item) => item.id.toString()}
-              emptyMessage="No subjects found"
-            />
-          )}
+          </div>
         </CardContent>
       </Card>
+
+      {/* Subjects Cards Grid */}
+      <div>
+        {isLoading ? (
+          <div className="flex justify-center py-8">
+            <Spinner size="lg" />
+          </div>
+        ) : error ? (
+          <Alert variant="error">Failed to load subjects. Please try again.</Alert>
+        ) : subjects.length === 0 ? (
+          <Card>
+            <CardContent>
+              <div className="text-center py-12">
+                <BookOpen className="w-16 h-16 mx-auto text-secondary-300 mb-4" />
+                <h3 className="text-lg font-medium text-secondary-900 mb-2">No subjects found</h3>
+                <p className="text-secondary-500 mb-6">
+                  {searchQuery || levelFilter
+                    ? 'Try adjusting your filters'
+                    : 'Get started by adding your first subject'}
+                </p>
+                {canManageSubjects && !searchQuery && !levelFilter && (
+                  <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowAddModal(true)}>
+                    Add Your First Subject
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {subjects.map((subject: Subject) => (
+              <Card key={subject.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-4">
+                  {/* Subject Header */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-primary-100 flex items-center justify-center">
+                        <BookOpen className="h-5 w-5 text-primary-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-secondary-900">{subject.subjectName}</h3>
+                        <p className="text-xs text-secondary-500">{subject.subjectCode}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Subject Info */}
+                  <div className="mb-4">
+                    <Badge
+                      variant={subject.level === 'Senior' ? 'primary' : subject.level === 'Junior' ? 'info' : 'secondary'}
+                      size="sm"
+                    >
+                      {subject.level || 'All Levels'}
+                    </Badge>
+                  </div>
+
+                  {/* Actions */}
+                  {canManageSubjects && (
+                    <div className="flex items-center gap-2 pt-3 border-t border-secondary-100">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleEdit(subject)}
+                      >
+                        <Edit className="w-4 h-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(subject)}
+                        className="text-danger-500 hover:text-danger-700 hover:bg-danger-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Add/Edit Subject Modal */}
       <Modal

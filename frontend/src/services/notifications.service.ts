@@ -1,13 +1,37 @@
 import api from './axios';
 
+export type ActivityType = 
+  | 'student_added' 
+  | 'student_updated' 
+  | 'student_deleted'
+  | 'teacher_added' 
+  | 'teacher_updated'
+  | 'teacher_deleted'
+  | 'teacher_assigned'
+  | 'result_entered'
+  | 'result_updated'
+  | 'result_published' 
+  | 'attendance_marked' 
+  | 'session_created' 
+  | 'session_activated'
+  | 'term_created'
+  | 'term_activated'
+  | 'class_created'
+  | 'class_updated'
+  | 'subject_created'
+  | 'subject_updated'
+  | 'user_login'
+  | 'password_changed';
+
 export interface Activity {
   id: string;
-  type: 'student_added' | 'teacher_added' | 'result_published' | 'attendance_marked' | 'session_created' | 'term_created';
+  type: ActivityType;
   title: string;
   description: string;
   timestamp: string;
   user?: string;
-  metadata?: any;
+  userRole?: string;
+  metadata?: Record<string, any>;
 }
 
 export interface Notification {
@@ -20,8 +44,8 @@ export interface Notification {
   link?: string;
 }
 
-// Mock data for now - will be replaced with real API when backend is ready
-const mockActivities: Activity[] = [
+// Fallback mock data in case API fails
+const fallbackActivities: Activity[] = [
   {
     id: '1',
     type: 'student_added',
@@ -40,11 +64,11 @@ const mockActivities: Activity[] = [
   },
   {
     id: '3',
-    type: 'result_published',
-    title: 'Results Published',
-    description: 'First Term results for SSS 2 published',
+    type: 'result_entered',
+    title: 'Results Entered',
+    description: 'First Term results for SSS 2 entered',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
-    user: 'Admin',
+    user: 'Subject Teacher',
   },
 ];
 
@@ -69,22 +93,50 @@ const mockNotifications: Notification[] = [
 
 export const notificationsApi = {
   /**
-   * Get recent activities
+   * Get recent activities from backend
    */
   getRecentActivities: async (limit: number = 10): Promise<Activity[]> => {
-    // TODO: Replace with real API call
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(mockActivities.slice(0, limit));
-      }, 300);
-    });
+    try {
+      const response = await api.get<Activity[]>(`/activities/recent?limit=${limit}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching activities, using fallback:', error);
+      // Return fallback data if API fails
+      return fallbackActivities.slice(0, limit);
+    }
+  },
+
+  /**
+   * Get all activities with pagination
+   */
+  getAllActivities: async (limit: number = 20, offset: number = 0): Promise<{ data: Activity[]; meta: { total: number } }> => {
+    try {
+      const response = await api.get(`/activities?limit=${limit}&offset=${offset}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching all activities:', error);
+      return { data: fallbackActivities, meta: { total: fallbackActivities.length } };
+    }
+  },
+
+  /**
+   * Get activities by role
+   */
+  getActivitiesByRole: async (role: string, limit: number = 10): Promise<Activity[]> => {
+    try {
+      const response = await api.get<Activity[]>(`/activities/by-role?role=${encodeURIComponent(role)}&limit=${limit}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching activities by role:', error);
+      return [];
+    }
   },
 
   /**
    * Get notifications
    */
   getNotifications: async (limit: number = 10): Promise<Notification[]> => {
-    // TODO: Replace with real API call
+    // TODO: Replace with real API call when backend is ready
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve(mockNotifications.slice(0, limit));

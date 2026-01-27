@@ -6,15 +6,19 @@ export interface JwtPayload {
 }
 
 export interface AuthResponse {
-  access_token: string;
-  refresh_token: string;
+  access_token: string | null;
+  refresh_token: string | null;
+  requiresRoleSelection?: boolean;
+  availableRoles?: string[];
   user: {
     id: number;
     username: string;
-    role: string;
+    role: string | null;
     mustChangePassword: boolean;
     teacherId?: number | null;
     studentId?: number | null;
+    formTeacherClassId?: number | null;
+    formTeacherClassName?: string | null;
   };
 }
 

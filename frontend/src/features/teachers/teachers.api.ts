@@ -110,4 +110,13 @@ export const teachersApi = {
    */
   getByClass: (classId: number) =>
     api.get<ApiResponse<Teacher[]>>(`/teachers/class/${classId}`),
+
+  /**
+   * Reset teacher password
+   * Uses the user_id from the teacher record
+   */
+  resetPassword: async (userId: number) => {
+    const response = await api.post<{ newPassword: string }>(`/users/${userId}/reset-password`);
+    return response.data;
+  },
 };

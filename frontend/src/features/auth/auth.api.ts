@@ -1,8 +1,8 @@
 import axiosInstance from '../../services/axios';
-import type { AuthResponse, User } from '../../types';
+import type { AuthResponse, User, LoginCredentials } from '../../types';
 
 export const authApi = {
-  login: async (credentials: { username: string; password: string }): Promise<AuthResponse> => {
+  login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
     const response = await axiosInstance.post<AuthResponse>('/auth/login', credentials);
     return response.data;
   },

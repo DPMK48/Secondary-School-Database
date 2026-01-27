@@ -50,8 +50,8 @@ const FormTeacherResultCompilation: React.FC = () => {
   // Fetch session and term data from backend
   const { data: currentSession } = useCurrentSession();
   const { data: currentTerm } = useCurrentTerm();
-  const { data: sessionsResponse } = useSessions();
-  const { data: termsResponse } = useTerms();
+  const { data: sessions } = useSessions();
+  const { data: terms } = useTerms();
   
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSession, setSelectedSession] = useState('');
@@ -463,7 +463,7 @@ const FormTeacherResultCompilation: React.FC = () => {
                 onChange={(value) => setSelectedSession(value)}
                 options={[
                   { value: '', label: 'Select session...' },
-                  ...(sessionsResponse?.data || []).map((s: any) => ({ 
+                  ...(Array.isArray(sessions) ? sessions : []).map((s: any) => ({ 
                     value: s.id.toString(), 
                     label: s.sessionName 
                   }))
@@ -478,7 +478,7 @@ const FormTeacherResultCompilation: React.FC = () => {
                 onChange={(value) => setSelectedTerm(value)}
                 options={[
                   { value: '', label: 'Select term...' },
-                  ...(termsResponse?.data || []).map((t: any) => ({ 
+                  ...(Array.isArray(terms) ? terms : []).map((t: any) => ({ 
                     value: t.id.toString(), 
                     label: t.termName 
                   }))

@@ -12,7 +12,8 @@ const SCHOOL_CODE = 'ESS001'; // Excellence Secondary School
 // Generate teacher credentials from email
 const generateCredentials = (email: string) => {
   const username = email.split('@')[0];
-  const password = `${SCHOOL_CODE}@2024`;
+  const currentYear = new Date().getFullYear();
+  const password = `${SCHOOL_CODE}@${currentYear}`;
   return { username, password };
 };
 

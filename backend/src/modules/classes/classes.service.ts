@@ -187,8 +187,25 @@ export class ClassesService {
     // Handle form teacher assignment
     if (formTeacherId !== undefined) {
       if (formTeacherId) {
-        const result = await this.assignFormTeacher(id, formTeacherId);
-        credentials = result.credentials;
+        // Check if the form teacher is actually changing
+        const currentSession = await this.sessionRepository.findOne({
+          where: { isCurrent: true },
+        });
+
+        let currentFormTeacherId = null;
+        if (currentSession) {
+          const existingAssignment = await this.formTeacherRepository.findOne({
+            where: { classId: id, sessionId: currentSession.id },
+          });
+          currentFormTeacherId = existingAssignment?.teacherId || null;
+        }
+
+        // Only assign and generate credentials if form teacher is different
+        if (currentFormTeacherId !== formTeacherId) {
+          const result = await this.assignFormTeacher(id, formTeacherId);
+          credentials = result.credentials;
+        }
+        // If same teacher, no credentials are returned (they keep their existing ones)
       } else {
         // Remove form teacher assignment
         await this.removeFormTeacher(id);

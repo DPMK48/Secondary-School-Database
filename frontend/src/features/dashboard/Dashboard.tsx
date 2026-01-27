@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useRole } from '../../hooks/useRole';
 import { Card, CardHeader, CardTitle, CardContent, Badge } from '../../components/common';
@@ -12,6 +12,13 @@ import {
   TrendingUp,
   Activity,
   Clock,
+  UserPlus,
+  FileText,
+  Calendar,
+  CheckCircle,
+  Edit,
+  Trash2,
+  RefreshCw,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useStudentsQuery } from '../../hooks/useStudents';
@@ -19,7 +26,76 @@ import { useTeachersQuery, useTeacherAssignmentsQuery } from '../../hooks/useTea
 import { useClassesQuery } from '../../hooks/useClasses';
 import { useSubjectsQuery } from '../../hooks/useSubjects';
 import { useCurrentSession, useCurrentTerm } from '../../hooks/useSessionTerm';
-import { notificationsApi, type Activity as ActivityType } from '../../services/notifications.service';
+import { notificationsApi, type Activity as ActivityType, type ActivityType as ActivityTypeEnum } from '../../services/notifications.service';
+
+// Get icon based on activity type
+const getActivityIcon = (type: ActivityTypeEnum) => {
+  switch (type) {
+    case 'student_added':
+    case 'teacher_added':
+      return UserPlus;
+    case 'student_updated':
+    case 'teacher_updated':
+    case 'result_updated':
+    case 'class_updated':
+    case 'subject_updated':
+      return Edit;
+    case 'student_deleted':
+    case 'teacher_deleted':
+      return Trash2;
+    case 'result_entered':
+    case 'result_published':
+      return FileText;
+    case 'attendance_marked':
+      return CheckCircle;
+    case 'session_created':
+    case 'session_activated':
+    case 'term_created':
+    case 'term_activated':
+      return Calendar;
+    case 'class_created':
+      return School;
+    case 'subject_created':
+      return BookOpen;
+    case 'user_login':
+    case 'password_changed':
+      return Users;
+    default:
+      return Clock;
+  }
+};
+
+// Get color based on activity type
+const getActivityColor = (type: ActivityTypeEnum) => {
+  switch (type) {
+    case 'student_added':
+    case 'teacher_added':
+    case 'class_created':
+    case 'subject_created':
+    case 'session_created':
+    case 'term_created':
+      return 'bg-green-100 text-green-600';
+    case 'student_updated':
+    case 'teacher_updated':
+    case 'result_updated':
+    case 'class_updated':
+    case 'subject_updated':
+      return 'bg-blue-100 text-blue-600';
+    case 'student_deleted':
+    case 'teacher_deleted':
+      return 'bg-red-100 text-red-600';
+    case 'result_entered':
+    case 'result_published':
+      return 'bg-purple-100 text-purple-600';
+    case 'attendance_marked':
+      return 'bg-orange-100 text-orange-600';
+    case 'session_activated':
+    case 'term_activated':
+      return 'bg-yellow-100 text-yellow-600';
+    default:
+      return 'bg-primary-100 text-primary-600';
+  }
+};
 
 const Dashboard: React.FC = () => {
   const { user, isAuthenticated, teacherId } = useAuth();
@@ -55,6 +131,7 @@ const Dashboard: React.FC = () => {
   const { data: currentSession, isLoading: sessionLoading } = useCurrentSession();
   const { data: currentTerm, isLoading: termLoading } = useCurrentTerm();
   const [recentActivities, setRecentActivities] = useState<ActivityType[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(false);
 
   // Fetch teacher's assignments if user is a teacher
   const { data: teacherAssignmentsData, isLoading: assignmentsLoading } = useTeacherAssignmentsQuery(
@@ -63,19 +140,23 @@ const Dashboard: React.FC = () => {
   );
 
   // Load recent activities
-  useEffect(() => {
-    const loadActivities = async () => {
-      try {
-        const activities = await notificationsApi.getRecentActivities(5);
-        setRecentActivities(activities);
-      } catch (error) {
-        console.error('Error loading recent activities:', error);
-      }
-    };
-    if (isAuthenticated) {
-      loadActivities();
+  const loadActivities = useCallback(async () => {
+    if (!isAuthenticated) return;
+    
+    setActivitiesLoading(true);
+    try {
+      const activities = await notificationsApi.getRecentActivities(10);
+      setRecentActivities(activities);
+    } catch (error) {
+      console.error('Error loading recent activities:', error);
+    } finally {
+      setActivitiesLoading(false);
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    loadActivities();
+  }, [loadActivities]);
 
   console.log('📊 [DASHBOARD] Queries enabled:', isAuthenticated);
   console.log('📊 [DASHBOARD] Loading states:', {
@@ -108,18 +189,15 @@ const Dashboard: React.FC = () => {
     const totalClasses = classesData?.meta?.total || 0;
     const totalSubjects = subjectsData?.meta?.total || 0;
     
-    // Extract session and term data from API response
-    // Backend returns { success: true, data: { sessionName, ... } }
-    const sessionData = currentSession?.data || currentSession;
-    const termData = currentTerm?.data || currentTerm;
+    // Session and term data is already extracted by the hooks
 
     return {
       total_students: totalStudents,
       total_teachers: totalTeachers,
       total_classes: totalClasses,
       total_subjects: totalSubjects,
-      current_session: sessionData || { sessionName: 'Loading...' },
-      current_term: termData || { termName: 'Loading...' },
+      current_session: currentSession || { sessionName: 'Loading...' },
+      current_term: currentTerm || { termName: 'Loading...' },
     };
   }, [
     studentsData?.meta?.total, 
@@ -283,39 +361,67 @@ const Dashboard: React.FC = () => {
         <Card>
             <CardHeader>
               <CardTitle>
-                <div className="flex items-center gap-2">
-                  <Activity className="h-5 w-5 text-primary-600" />
-                  Recent Activities
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-primary-600" />
+                    Recent Activities
+                  </div>
+                  <button
+                    onClick={loadActivities}
+                    disabled={activitiesLoading}
+                    className="p-2 text-secondary-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors disabled:opacity-50"
+                    title="Refresh activities"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${activitiesLoading ? 'animate-spin' : ''}`} />
+                  </button>
                 </div>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {recentActivities.length === 0 ? (
-                  <p className="text-center text-secondary-500 py-4">No recent activities</p>
+              <div className="space-y-3">
+                {activitiesLoading && recentActivities.length === 0 ? (
+                  <div className="flex items-center justify-center py-8">
+                    <RefreshCw className="h-6 w-6 animate-spin text-primary-600" />
+                  </div>
+                ) : recentActivities.length === 0 ? (
+                  <p className="text-center text-secondary-500 py-8">No recent activities</p>
                 ) : (
-                  recentActivities.map((activity) => (
-                    <div
-                      key={activity.id}
-                      className="flex items-start gap-4 p-4 bg-secondary-50 rounded-xl hover:bg-secondary-100 transition-colors"
-                    >
-                      <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
-                        <Clock className="h-5 w-5 text-primary-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <p className="font-medium text-secondary-900 truncate">
-                            {activity.title}
-                          </p>
-                          <span className="text-xs text-secondary-500 whitespace-nowrap">
-                            {formatDate(activity.timestamp)}
-                          </span>
+                  recentActivities.map((activity) => {
+                    const IconComponent = getActivityIcon(activity.type);
+                    const colorClass = getActivityColor(activity.type);
+                    
+                    return (
+                      <div
+                        key={activity.id}
+                        className="flex items-start gap-4 p-4 bg-secondary-50 rounded-xl hover:bg-secondary-100 transition-colors"
+                      >
+                        <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${colorClass}`}>
+                          <IconComponent className="h-5 w-5" />
                         </div>
-                        <p className="text-sm text-secondary-600">{activity.description}</p>
-                        <p className="text-xs text-secondary-400 mt-1">by {activity.user}</p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <p className="font-medium text-secondary-900 truncate">
+                              {activity.title}
+                            </p>
+                            <span className="text-xs text-secondary-500 whitespace-nowrap">
+                              {formatDate(activity.timestamp)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-secondary-600">{activity.description}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="secondary" className="text-xs">
+                              {activity.userRole || activity.user || 'System'}
+                            </Badge>
+                            {activity.user && activity.userRole && (
+                              <span className="text-xs text-secondary-400">
+                                • {activity.user}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </CardContent>
@@ -371,89 +477,7 @@ const Dashboard: React.FC = () => {
         )}
 
         {/* Teacher's Assigned Subjects and Classes - For Teachers Only */}
-        {isTeacher && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* My Assigned Subjects */}
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <div className="flex items-center gap-2">
-                    <BookOpen className="h-5 w-5 text-primary-600" />
-                    My Assigned Subjects
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {assignmentsLoading ? (
-                  <div className="text-center py-4">Loading subjects...</div>
-                ) : teacherSubjects.length === 0 ? (
-                  <p className="text-center text-secondary-500 py-4">
-                    No subjects assigned yet. Contact your administrator.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {teacherSubjects.map((subject: any) => (
-                      <div
-                        key={subject.id}
-                        className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg"
-                      >
-                        <div>
-                          <p className="font-medium text-secondary-900">
-                            {subject.subjectName}
-                          </p>
-                          <p className="text-xs text-secondary-500">{subject.subjectCode}</p>
-                        </div>
-                        <Badge variant="primary">
-                          {teacherAssignments.filter((a: any) => a.subject?.id === subject.id).length} classes
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* My Assigned Classes */}
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <div className="flex items-center gap-2">
-                    <School className="h-5 w-5 text-primary-600" />
-                    My Assigned Classes
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {assignmentsLoading ? (
-                  <div className="text-center py-4">Loading classes...</div>
-                ) : teacherClasses.length === 0 ? (
-                  <p className="text-center text-secondary-500 py-4">
-                    No classes assigned yet. Contact your administrator.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {teacherClasses.map((cls: any) => (
-                      <div
-                        key={cls.id}
-                        className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg"
-                      >
-                        <div>
-                          <p className="font-medium text-secondary-900">
-                            {cls.className} {cls.arm}
-                          </p>
-                          <p className="text-xs text-secondary-500">{cls.level}</p>
-                        </div>
-                        <Badge variant={cls.level === 'Senior' ? 'primary' : 'info'}>
-                          {teacherAssignments.filter((a: any) => a.class?.id === cls.id).length} subjects
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        )}
+        {/* Removed - now available on My Subjects page */}
       </div>
     </div>
   );

@@ -7,12 +7,15 @@ import { UpdateAttendanceDto } from './dto/update-attendance.dto';
 import { BulkAttendanceDto } from './dto/bulk-attendance.dto';
 import { QueryAttendanceDto } from './dto/query-attendance.dto';
 import { paginate } from '../../common/helpers/pagination.helper';
+import { ActivitiesService } from '../activities/activities.service';
+import { ActivityType } from '../../entities/activity.entity';
 
 @Injectable()
 export class AttendanceService {
   constructor(
     @InjectRepository(Attendance)
     private readonly attendanceRepository: Repository<Attendance>,
+    private readonly activitiesService: ActivitiesService,
   ) {}
 
   async create(createAttendanceDto: CreateAttendanceDto) {
@@ -56,6 +59,18 @@ export class AttendanceService {
     });
 
     const saved = await this.attendanceRepository.save(records);
+
+    // Log activity
+    const presentCount = attendances.filter(a => a.status === 'Present').length;
+    const absentCount = attendances.filter(a => a.status === 'Absent').length;
+    await this.activitiesService.logActivity(
+      ActivityType.ATTENDANCE_MARKED,
+      'Attendance Marked',
+      `Attendance marked for ${attendances.length} students (${presentCount} present, ${absentCount} absent)`,
+      undefined,
+      'Form Teacher',
+      { classId, date, presentCount, absentCount, total: attendances.length },
+    );
 
     return {
       success: true,

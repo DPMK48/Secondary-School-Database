@@ -17,10 +17,8 @@ import { getFullName } from '../../utils/helpers';
 import { ASSESSMENT_TYPES } from '../../utils/constants';
 import { Save, Search, AlertCircle, CheckCircle } from 'lucide-react';
 import { useCurrentSession, useCurrentTerm } from '../../hooks/useSessionTerm';
-import { useClassStudentsQuery } from '../../hooks/useClasses';
-import { useTeacherAssignmentsQuery } from '../../hooks/useTeachers';
+import { useClassesQuery, useClassStudentsQuery, useClassSubjectsQuery } from '../../hooks/useClasses';
 import { useBulkResultMutation, useSubjectResultsQuery } from '../../hooks/useResults';
-import { useAuth } from '../../hooks/useAuth';
 import type { Student, Class, Subject } from '../../types';
 
 // Helper to get class display name
@@ -31,9 +29,6 @@ const getClassDisplayName = (classItem: Class | { className?: string; class_name
 };
 
 const ScoreEntry: React.FC = () => {
-  const { user, teacherId } = useAuth();
-  const isAdmin = user?.role === 'Admin';
-  
   // Fetch current session/term from backend
   const { data: currentSession } = useCurrentSession();
   const { data: currentTerm } = useCurrentTerm();
@@ -44,60 +39,25 @@ const ScoreEntry: React.FC = () => {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [scores, setScores] = useState<{ [studentId: number]: number }>({});
 
-  // Fetch teacher's assignments from API (for teachers only)
-  const { data: assignmentsData, isLoading: isLoadingAssignments } = useTeacherAssignmentsQuery(
-    teacherId || 0,
-    { enabled: !!teacherId && !isAdmin }
-  );
-
-  // Process assignments to get available classes and subjects for the teacher
-  const availableAssignments = useMemo(() => {
-    if (isAdmin) return []; // Admin uses different logic
-    if (!assignmentsData) return [];
-    const data = assignmentsData.data || assignmentsData || [];
-    return Array.isArray(data) ? data : [];
-  }, [assignmentsData, isAdmin]);
-
-  // Get unique classes from teacher's assignments
+  // Fetch classes from API
+  const { data: classesData, isLoading: isLoadingClasses } = useClassesQuery();
   const availableClasses = useMemo(() => {
-    if (isAdmin) return []; // Admin should use a different approach
-    const classMap = new Map();
-    availableAssignments.forEach((a: any) => {
-      const cls = a.class || a.classEntity;
-      if (cls && !classMap.has(cls.id)) {
-        classMap.set(cls.id, {
-          id: cls.id,
-          className: cls.className || cls.class_name,
-          arm: cls.arm,
-          level: cls.level,
-        });
-      }
-    });
-    return Array.from(classMap.values());
-  }, [availableAssignments, isAdmin]);
+    if (!classesData) return [];
+    // Handle both paginated and non-paginated responses
+    return Array.isArray(classesData) ? classesData : classesData.data || [];
+  }, [classesData]);
 
-  // Get subjects available for the selected class (from teacher's assignments)
+  // Fetch subjects for selected class
+  const { data: subjectsData, isLoading: isLoadingSubjects } = useClassSubjectsQuery(
+    parseInt(selectedClass) || 0,
+    { enabled: !!selectedClass }
+  );
   const availableSubjects = useMemo(() => {
-    if (!selectedClass) return [];
-    const classId = parseInt(selectedClass);
-    const subjectMap = new Map();
-    availableAssignments
-      .filter((a: any) => {
-        const cls = a.class || a.classEntity;
-        return cls && cls.id === classId;
-      })
-      .forEach((a: any) => {
-        const subj = a.subject;
-        if (subj && !subjectMap.has(subj.id)) {
-          subjectMap.set(subj.id, {
-            id: subj.id,
-            subjectName: subj.subjectName || subj.subject_name,
-            subjectCode: subj.subjectCode || subj.subject_code,
-          });
-        }
-      });
-    return Array.from(subjectMap.values());
-  }, [selectedClass, availableAssignments]);
+    if (!subjectsData) return [];
+    const subjects = subjectsData.data || subjectsData || [];
+    // ClassSubject has nested subject object
+    return subjects.map((cs: any) => cs.subject || cs);
+  }, [subjectsData]);
 
   // Fetch students in selected class
   const { data: studentsData, isLoading: isLoadingStudents } = useClassStudentsQuery(
@@ -107,14 +67,8 @@ const ScoreEntry: React.FC = () => {
   const classStudents = useMemo(() => {
     if (!studentsData) return [];
     const students = studentsData.data || studentsData || [];
-    // Filter active students and sort by name
-    return students
-      .filter((s: Student) => s.status === 'Active')
-      .sort((a: Student, b: Student) => {
-        const nameA = getFullName(a.firstName || a.first_name, a.lastName || a.last_name);
-        const nameB = getFullName(b.firstName || b.first_name, b.lastName || b.last_name);
-        return nameA.localeCompare(nameB);
-      });
+    // Filter active students
+    return students.filter((s: Student) => s.status === 'Active');
   }, [studentsData]);
 
   // Fetch existing results for selected class/subject
@@ -150,11 +104,11 @@ const ScoreEntry: React.FC = () => {
       const results = existingResultsData.data || existingResultsData || [];
       const newScores: { [studentId: number]: number } = {};
       
-      // Map assessment type to ID (1st Test=1, 2nd Test=2, 3rd Test=3, Exam=4)
+      // Map assessment type to ID
       const assessmentMap: { [key: string]: number } = {
-        '1st Test': 1,
-        '2nd Test': 2,
-        '3rd Test': 3,
+        'Test 1': 1,
+        'Test 2': 2,
+        'Test 3': 3,
         'Exam': 4,
       };
       const assessmentId = assessmentMap[assessmentType];
@@ -171,7 +125,7 @@ const ScoreEntry: React.FC = () => {
 
   const handleScoreChange = (studentId: number, value: string) => {
     const numValue = parseInt(value) || 0;
-    const maxScore = assessmentType === 'Exam' ? ASSESSMENT_TYPES.EXAM.max_score : ASSESSMENT_TYPES.TEST1.max_score;
+    const maxScore = assessmentType === 'Exam' ? 70 : 10;
     setScores({
       ...scores,
       [studentId]: Math.min(Math.max(0, numValue), maxScore),
@@ -184,11 +138,11 @@ const ScoreEntry: React.FC = () => {
       return;
     }
 
-    // Map assessment type to ID (1st Test=1, 2nd Test=2, 3rd Test=3, Exam=4)
+    // Map assessment type to ID
     const assessmentMap: { [key: string]: number } = {
-      '1st Test': 1,
-      '2nd Test': 2,
-      '3rd Test': 3,
+      'Test 1': 1,
+      'Test 2': 2,
+      'Test 3': 3,
       'Exam': 4,
     };
     const assessmentId = assessmentMap[assessmentType];
@@ -197,7 +151,7 @@ const ScoreEntry: React.FC = () => {
       await bulkResultMutation.mutateAsync({
         class_id: parseInt(selectedClass),
         subject_id: parseInt(selectedSubject),
-        teacher_id: teacherId || 1,
+        teacher_id: 1, // TODO: Get from auth context
         session_id: currentSession.id,
         term_id: currentTerm.id,
         assessment_id: assessmentId,
@@ -212,27 +166,24 @@ const ScoreEntry: React.FC = () => {
     }
   };
 
-  const classOptions = availableClasses.map((c: any) => ({
-    value: c.id.toString(),
+  const classOptions = availableClasses.map((c: Class) => ({
+    value: (c.id || (c as any).id).toString(),
     label: getClassDisplayName(c),
   }));
 
-  const subjectOptions = availableSubjects.map((s: any) => ({
-    value: s.id.toString(),
+  const subjectOptions = availableSubjects.map((s: Subject) => ({
+    value: (s.id || (s as any).id).toString(),
     label: s.subjectName || s.subject_name || '',
   }));
 
-  // Assessment type options (Test 1/2/3: 10 marks each, Exam: 70 marks)
-  const assessmentOptions = [
-    { value: '1st Test', label: `1st Test (Max: ${ASSESSMENT_TYPES.TEST1.max_score})` },
-    { value: '2nd Test', label: `2nd Test (Max: ${ASSESSMENT_TYPES.TEST2.max_score})` },
-    { value: '3rd Test', label: `3rd Test (Max: ${ASSESSMENT_TYPES.TEST3.max_score})` },
-    { value: 'Exam', label: `Exam (Max: ${ASSESSMENT_TYPES.EXAM.max_score})` },
-  ];
+  const assessmentOptions = Object.values(ASSESSMENT_TYPES).map((type) => ({
+    value: type.name,
+    label: type.name,
+  }));
 
-  const getMaxScore = () => (assessmentType === 'Exam' ? ASSESSMENT_TYPES.EXAM.max_score : ASSESSMENT_TYPES.TEST1.max_score);
+  const getMaxScore = () => (assessmentType === 'Exam' ? 70 : 10);
 
-  const isLoading = isLoadingAssignments || isLoadingStudents;
+  const isLoading = isLoadingClasses || isLoadingSubjects || isLoadingStudents;
 
   const columns = [
     {
@@ -274,7 +225,6 @@ const ScoreEntry: React.FC = () => {
           value={scores[row.id]?.toString() || ''}
           onChange={(e) => handleScoreChange(row.id, e.target.value)}
           className="w-24"
-          placeholder="0"
         />
       ),
     },
@@ -303,40 +253,13 @@ const ScoreEntry: React.FC = () => {
   const pendingCount = filteredStudents.length - enteredCount;
 
   // Get selected class and subject names for display
-  const selectedClassObj = availableClasses.find((c: any) => c.id === parseInt(selectedClass));
-  const selectedSubjectObj = availableSubjects.find((s: any) => s.id === parseInt(selectedSubject));
+  const selectedClassObj = availableClasses.find((c: Class) => c.id === parseInt(selectedClass));
+  const selectedSubjectObj = availableSubjects.find((s: Subject) => s.id === parseInt(selectedSubject));
 
-  if (isLoading && !availableClasses.length) {
+  if (isLoading && !classesData) {
     return (
       <div className="flex justify-center items-center h-64">
         <Spinner size="lg" />
-      </div>
-    );
-  }
-
-  // Show message if no assignments
-  if (!isAdmin && availableClasses.length === 0 && !isLoadingAssignments) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-secondary-900">Score Entry</h1>
-          <p className="text-secondary-500 mt-1">
-            {currentSession?.sessionName || 'Loading...'} - {currentTerm?.termName || 'Loading...'}
-          </p>
-        </div>
-        <Card>
-          <CardContent>
-            <div className="text-center py-12">
-              <AlertCircle className="h-12 w-12 text-secondary-300 mx-auto mb-4" />
-              <p className="text-lg font-medium text-secondary-600 mb-2">
-                No Classes Assigned
-              </p>
-              <p className="text-secondary-500">
-                You don't have any classes assigned yet. Please contact your administrator.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     );
   }
@@ -351,20 +274,12 @@ const ScoreEntry: React.FC = () => {
             {currentSession?.sessionName || 'Loading...'} - {currentTerm?.termName || 'Loading...'}
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-primary-50 px-4 py-2 rounded-lg">
-          <span className="text-sm text-primary-700">Format:</span>
-          <Badge variant="secondary">Tests: 10 each</Badge>
-          <span className="text-primary-400">+</span>
-          <Badge variant="info">Exam: 70</Badge>
-          <span className="text-primary-400">=</span>
-          <Badge variant="primary">100</Badge>
-        </div>
       </div>
 
       {/* Selection Panel */}
       <Card>
         <CardHeader>
-          <CardTitle>Select Class, Subject & Assessment Type</CardTitle>
+          <CardTitle>Select Class & Subject</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -375,7 +290,6 @@ const ScoreEntry: React.FC = () => {
               onChange={(value) => {
                 setSelectedClass(value);
                 setSelectedSubject('');
-                setAssessmentType('');
                 setScores({});
               }}
               placeholder="Select class"
@@ -386,7 +300,6 @@ const ScoreEntry: React.FC = () => {
               value={selectedSubject}
               onChange={(value) => {
                 setSelectedSubject(value);
-                setAssessmentType('');
                 setScores({});
               }}
               placeholder="Select subject"
@@ -415,7 +328,8 @@ const ScoreEntry: React.FC = () => {
               <div>
                 <CardTitle>
                   {selectedClassObj ? getClassDisplayName(selectedClassObj) : ''}{' '}
-                  - {selectedSubjectObj?.subjectName || ''} ({assessmentType})
+                  - {selectedSubjectObj?.subjectName || selectedSubjectObj?.subject_name || ''} (
+                  {assessmentType})
                 </CardTitle>
                 <div className="flex items-center gap-4 mt-2">
                   <span className="text-sm text-secondary-500">
@@ -485,17 +399,12 @@ const ScoreEntry: React.FC = () => {
       >
         <div className="space-y-4">
           <Alert variant="info">
-            You are about to save {enteredCount} {assessmentType} scores for{' '}
-            {selectedSubjectObj?.subjectName || ''}.
+            You are about to save {enteredCount} scores for {assessmentType} in{' '}
+            {selectedSubjectObj?.subjectName || selectedSubjectObj?.subject_name || ''}.
           </Alert>
           <p className="text-sm text-secondary-600">
             Make sure all scores are correct before saving. You can edit scores again later if needed.
           </p>
-          <div className="bg-secondary-50 p-3 rounded-lg">
-            <p className="text-sm text-secondary-700">
-              <strong>Max Score:</strong> {getMaxScore()} marks
-            </p>
-          </div>
           {bulkResultMutation.isPending && (
             <div className="flex justify-center">
               <Spinner size="md" />

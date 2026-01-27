@@ -139,7 +139,12 @@ export const resultsApi = {
    * Get compiled results for form teacher (all subjects for a class)
    */
   getFormTeacherCompilation: (classId: number, params?: { term_id?: number; session_id?: number }) =>
-    api.get<ApiResponse<any>>(`/results/form-teacher/class/${classId}/compilation`, { params }),
+    api.get<ApiResponse<any>>(`/results/form-teacher/${classId}`, { 
+      params: {
+        termId: params?.term_id,
+        sessionId: params?.session_id,
+      }
+    }),
 
   /**
    * Get student's all subject scores (for form teacher view)
@@ -148,9 +153,10 @@ export const resultsApi = {
     api.get<ApiResponse<any>>(`/results/student/${studentId}/all-subjects`, { params }),
 
   /**
-   * Bulk save scores for subject teacher
+   * Bulk save scores for subject teacher - saves all assessment types
+   * Makes separate API calls for each assessment type (test1, test2, test3, exam)
    */
-  bulkSaveSubjectScores: (data: {
+  bulkSaveSubjectScores: async (data: {
     class_id: number;
     subject_id: number;
     teacher_id: number;
@@ -163,8 +169,41 @@ export const resultsApi = {
       test3?: number;
       exam?: number;
     }>;
-  }) =>
-    api.post<ApiResponse<any>>('/results/subject-teacher/bulk-save', data),
+  }) => {
+    const results = [];
+    
+    // Assessment mapping: test1=1, test2=2, test3=3, exam=4
+    const assessmentTypes = [
+      { key: 'test1', id: 1 },
+      { key: 'test2', id: 2 },
+      { key: 'test3', id: 3 },
+      { key: 'exam', id: 4 },
+    ];
+
+    for (const assessment of assessmentTypes) {
+      const scoresForAssessment = data.scores
+        .filter(s => (s as any)[assessment.key] !== undefined)
+        .map(s => ({
+          studentId: s.student_id,
+          score: (s as any)[assessment.key],
+        }));
+
+      if (scoresForAssessment.length > 0) {
+        const response = await api.post('/results/bulk', {
+          subjectId: data.subject_id,
+          classId: data.class_id,
+          teacherId: data.teacher_id,
+          sessionId: data.session_id,
+          termId: data.term_id,
+          assessmentId: assessment.id,
+          scores: scoresForAssessment,
+        });
+        results.push(response.data);
+      }
+    }
+
+    return { data: results };
+  },
 
   /**
    * Get subject teacher's assigned classes and subjects

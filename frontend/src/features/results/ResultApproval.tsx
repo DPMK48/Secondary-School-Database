@@ -50,8 +50,8 @@ const ResultApproval: React.FC = () => {
   // Fetch session and term data from backend
   const { data: currentSession } = useCurrentSession();
   const { data: currentTerm } = useCurrentTerm();
-  const { data: sessionsResponse } = useSessions();
-  const { data: termsResponse } = useTerms();
+  const { data: sessions } = useSessions();
+  const { data: terms } = useTerms();
   
   const [selectedSession, setSelectedSession] = useState('');
   const [selectedTerm, setSelectedTerm] = useState('');
@@ -352,7 +352,7 @@ const ResultApproval: React.FC = () => {
               label="Session"
               options={[
                 { value: '', label: 'Select session...' },
-                ...(sessionsResponse?.data || []).map((s: any) => ({ 
+                ...(Array.isArray(sessions) ? sessions : []).map((s: any) => ({ 
                   value: s.id.toString(), 
                   label: s.sessionName 
                 }))
@@ -364,7 +364,7 @@ const ResultApproval: React.FC = () => {
               label="Term"
               options={[
                 { value: '', label: 'Select term...' },
-                ...(termsResponse?.data || []).map((t: any) => ({ 
+                ...(Array.isArray(terms) ? terms : []).map((t: any) => ({ 
                   value: t.id.toString(), 
                   label: t.termName 
                 }))

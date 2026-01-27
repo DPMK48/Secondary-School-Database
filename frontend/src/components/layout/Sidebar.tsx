@@ -80,7 +80,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, isMobileOpen, onMobileClose }
         {isOpen && (
           <div>
             <h1 className="font-bold text-lg text-secondary-900">{APP_NAME}</h1>
-            <p className="text-xs text-secondary-500">Result Management</p>
+            <p className="text-xs text-secondary-500">Data Management</p>
           </div>
         )}
       </div>

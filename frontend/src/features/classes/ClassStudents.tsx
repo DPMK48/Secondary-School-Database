@@ -29,9 +29,11 @@ import {
   Mail,
   Phone,
   Eye,
+  Edit,
 } from 'lucide-react';
 import { useClassQuery, useClassStudentsQuery, useClassSubjectsQuery } from '../../hooks/useClasses';
-import type { Student } from '../../types';
+import type { Student, Class } from '../../types';
+import ClassForm from './ClassForm';
 
 const ClassStudents: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -41,6 +43,7 @@ const ClassStudents: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [genderFilter, setGenderFilter] = useState('');
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [showFormModal, setShowFormModal] = useState(false);
 
   const classId = parseInt(id || '0');
 
@@ -253,6 +256,11 @@ const ClassStudents: React.FC = () => {
           </h1>
           <p className="text-secondary-500 mt-1">View and manage students in this class</p>
         </div>
+        {canManageClasses && (
+          <Button leftIcon={<Edit className="h-4 w-4" />} onClick={() => setShowFormModal(true)}>
+            Edit Class
+          </Button>
+        )}
       </div>
 
       {/* Class Info Cards */}
@@ -424,6 +432,16 @@ const ClassStudents: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Edit Class Modal */}
+      <ClassForm
+        isOpen={showFormModal}
+        onClose={() => setShowFormModal(false)}
+        classData={classResponse?.data as Class}
+        onSuccess={() => {
+          setShowFormModal(false);
+        }}
+      />
     </div>
   );
 };

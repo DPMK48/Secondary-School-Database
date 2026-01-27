@@ -38,5 +38,6 @@ const getDatabaseConfig = (): TypeOrmModuleOptions => {
 
 export const typeOrmConfig: TypeOrmModuleOptions = getDatabaseConfig();
 
-// For TypeORM CLI
-export const dataSource = new DataSource(typeOrmConfig as DataSourceOptions);
+// For TypeORM CLI - must be default export
+const dataSource = new DataSource(typeOrmConfig as DataSourceOptions);
+export default dataSource;

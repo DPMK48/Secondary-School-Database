@@ -5,7 +5,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:30
 
 // Application Constants
 export const APP_NAME = 'Armburu Model School';
-export const APP_DESCRIPTION = 'School Result Management System';
+export const APP_DESCRIPTION = 'School Management System';
 
 // Grade Configuration
 export const GRADE_CONFIG: GradeConfig[] = [
@@ -17,12 +17,12 @@ export const GRADE_CONFIG: GradeConfig[] = [
   { min_score: 0, max_score: 39, grade: 'F', remark: 'Fail' },
 ];
 
-// Assessment Configuration
+// Assessment Configuration (Test 1/2/3: 10 marks each, Exam: 70 marks = Total 100)
 export const ASSESSMENT_TYPES = {
-  TEST1: { name: 'Test 1', max_score: 10 },
-  TEST2: { name: 'Test 2', max_score: 10 },
-  TEST3: { name: 'Test 3', max_score: 10 },
-  EXAM: { name: 'Exam', max_score: 70 },
+  TEST1: { id: 1, name: '1st Test', max_score: 10 },
+  TEST2: { id: 2, name: '2nd Test', max_score: 10 },
+  TEST3: { id: 3, name: '3rd Test', max_score: 10 },
+  EXAM: { id: 4, name: 'Exam', max_score: 70 },
 };
 
 // Role Permissions
@@ -82,7 +82,7 @@ export const NAV_ITEMS = {
   ],
   'Subject Teacher': [
     { label: 'Dashboard', path: '/dashboard', icon: 'LayoutDashboard' },
-    { label: 'My Classes', path: '/dashboard/classes', icon: 'School' },
+    { label: 'My Subjects', path: '/dashboard/my-subjects', icon: 'BookOpen' },
     { label: 'Score Entry', path: '/dashboard/results/entry', icon: 'Edit' },
   ],
 };
@@ -149,5 +149,5 @@ export const SESSIONS = ['2021/2022', '2022/2023', '2023/2024', '2024/2025'];
 export const APP_CONFIG = {
   schoolName: 'Armburu Model School',
   schoolMotto: 'Knowledge is Power',
-  address: 'Lagos, Nigeria',
+  address: 'Bauchi, Nigeria',
 };

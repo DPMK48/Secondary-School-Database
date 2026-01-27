@@ -7,7 +7,7 @@ import { Button, Input, Table, Pagination, Badge, Avatar, Card, Modal, Alert, Cr
 import { getClassDisplayName } from '../../utils/mockData';
 import { getFullName } from '../../utils/helpers';
 import type { Teacher } from '../../types';
-import { Search, Plus, Eye, Trash2, GraduationCap, BookOpen, School, Edit, LogIn } from 'lucide-react';
+import { Search, Plus, Eye, Trash2, GraduationCap, BookOpen, School } from 'lucide-react';
 import TeacherForm from './TeacherForm';
 import { useTeachersQuery, useDeleteTeacherMutation } from '../../hooks/useTeachers';
 
@@ -17,7 +17,8 @@ const SCHOOL_CODE = 'ESS001'; // Excellence Secondary School
 // Generate teacher credentials
 const generateCredentials = (email: string) => {
   const username = email.split('@')[0];
-  const password = `${SCHOOL_CODE}@2024`;
+  const currentYear = new Date().getFullYear();
+  const password = `${SCHOOL_CODE}@${currentYear}`;
   return { username, password };
 };
 
@@ -177,35 +178,23 @@ const TeacherList: React.FC = () => {
             <Eye className="h-4 w-4" />
           </button>
           {canManageTeachers && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleLoginAs(teacher);
-                }}
-                className="p-2 text-secondary-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                title="Login As"
-              >
-                <LogIn className="h-4 w-4" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Normalize teacher data before passing
-                  const normalizedTeacher = {
-                    ...teacher,
-                    first_name: teacher.first_name || teacher.firstName,
-                    last_name: teacher.last_name || teacher.lastName,
-                    staff_id: teacher.staff_id || teacher.staffId,
-                  };
-                  handleDelete(normalizedTeacher);
-                }}
-                className="p-2 text-secondary-500 hover:text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
-                title="Delete"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                // Normalize teacher data before passing
+                const normalizedTeacher = {
+                  ...teacher,
+                  first_name: teacher.first_name || teacher.firstName,
+                  last_name: teacher.last_name || teacher.lastName,
+                  staff_id: teacher.staff_id || teacher.staffId,
+                };
+                handleDelete(normalizedTeacher);
+              }}
+              className="p-2 text-secondary-500 hover:text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
+              title="Delete"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
           )}
         </div>
       ),
