@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, Button } from '../../components/common';
 import { useRole } from '../../hooks/useRole';
-import { CalendarCheck, Eye, Users, TrendingUp } from 'lucide-react';
+import { CalendarCheck, Eye, Users, TrendingUp, Sun, Sunset, Printer } from 'lucide-react';
 
 const AttendanceHub: React.FC = () => {
   const navigate = useNavigate();
@@ -11,7 +11,7 @@ const AttendanceHub: React.FC = () => {
   const sections = [
     {
       title: 'Mark Attendance',
-      description: 'Record daily attendance for your class',
+      description: 'Record daily attendance for your class (Morning & Afternoon)',
       icon: CalendarCheck,
       path: '/dashboard/attendance/entry',
       color: 'bg-green-500',
@@ -20,8 +20,8 @@ const AttendanceHub: React.FC = () => {
     {
       title: 'View Attendance',
       description: isAdmin 
-        ? 'View attendance records and print reports' 
-        : 'View attendance history and generate reports',
+        ? 'View all attendance records, print reports, and export data' 
+        : 'View attendance history for your class',
       icon: Eye,
       path: '/dashboard/attendance/view',
       color: 'bg-blue-500',
@@ -113,6 +113,33 @@ const AttendanceHub: React.FC = () => {
         </Card>
       </div>
 
+      {/* Attendance Info */}
+      <Card className="bg-gradient-to-r from-primary-50 to-blue-50 border-primary-200">
+        <CardContent className="p-6">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-white rounded-xl shadow-sm">
+              <CalendarCheck className="h-8 w-8 text-primary-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-secondary-900 mb-2">Daily Attendance Schedule</h3>
+              <p className="text-secondary-600 mb-3">
+                Attendance must be marked twice daily for a complete record:
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg shadow-sm">
+                  <Sun className="h-5 w-5 text-yellow-500" />
+                  <span className="text-sm font-medium text-secondary-700">Morning (1st Attendance)</span>
+                </div>
+                <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg shadow-sm">
+                  <Sunset className="h-5 w-5 text-orange-500" />
+                  <span className="text-sm font-medium text-secondary-700">Afternoon (2nd Attendance)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Recent Activity */}
       <Card>
         <CardHeader>
@@ -121,25 +148,34 @@ const AttendanceHub: React.FC = () => {
         <CardContent>
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg">
-              <div>
-                <p className="font-medium text-secondary-900">SS2 A - Today</p>
-                <p className="text-sm text-secondary-500">Marked at 08:30 AM</p>
+              <div className="flex items-center gap-3">
+                <Sun className="h-5 w-5 text-yellow-500" />
+                <div>
+                  <p className="font-medium text-secondary-900">SS2 A - Today (Morning)</p>
+                  <p className="text-sm text-secondary-500">Marked at 08:30 AM</p>
+                </div>
               </div>
               <span className="text-sm font-medium text-green-600">35/38 Present</span>
             </div>
             <div className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg">
-              <div>
-                <p className="font-medium text-secondary-900">SS2 A - Yesterday</p>
-                <p className="text-sm text-secondary-500">Marked at 08:25 AM</p>
-              </div>
-              <span className="text-sm font-medium text-green-600">37/38 Present</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg">
-              <div>
-                <p className="font-medium text-secondary-900">SS2 A - 2 days ago</p>
-                <p className="text-sm text-secondary-500">Marked at 08:35 AM</p>
+              <div className="flex items-center gap-3">
+                <Sunset className="h-5 w-5 text-orange-500" />
+                <div>
+                  <p className="font-medium text-secondary-900">SS2 A - Yesterday (Afternoon)</p>
+                  <p className="text-sm text-secondary-500">Marked at 02:15 PM</p>
+                </div>
               </div>
               <span className="text-sm font-medium text-green-600">36/38 Present</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-secondary-50 rounded-lg">
+              <div className="flex items-center gap-3">
+                <Sun className="h-5 w-5 text-yellow-500" />
+                <div>
+                  <p className="font-medium text-secondary-900">SS2 A - Yesterday (Morning)</p>
+                  <p className="text-sm text-secondary-500">Marked at 08:25 AM</p>
+                </div>
+              </div>
+              <span className="text-sm font-medium text-green-600">37/38 Present</span>
             </div>
           </div>
         </CardContent>

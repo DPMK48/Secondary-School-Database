@@ -31,7 +31,7 @@ export class AttendanceController {
   }
 
   @Post('bulk')
-  @Roles('Admin', 'Form Teacher')
+  @Roles('Admin', 'Form Teacher', 'Subject Teacher')
   bulkCreate(@Body() bulkAttendanceDto: BulkAttendanceDto) {
     return this.attendanceService.bulkCreate(bulkAttendanceDto);
   }
@@ -43,12 +43,25 @@ export class AttendanceController {
   }
 
   @Get('statistics')
-  @Roles('Admin', 'Form Teacher')
+  @Roles('Admin', 'Form Teacher', 'Subject Teacher')
   getStatistics(
     @Query('sessionId', ParseIntPipe) sessionId?: number,
     @Query('termId', ParseIntPipe) termId?: number,
   ) {
     return this.attendanceService.getStatistics(sessionId, termId);
+  }
+
+  /**
+   * Get attendance status for a class on a specific date
+   * Returns morning/afternoon completion status
+   */
+  @Get('status/:classId/:date')
+  @Roles('Admin', 'Form Teacher', 'Subject Teacher')
+  getAttendanceStatus(
+    @Param('classId', ParseIntPipe) classId: number,
+    @Param('date') date: string,
+  ) {
+    return this.attendanceService.getAttendanceStatus(classId, date);
   }
 
   @Get('class/:classId/date/:date')
@@ -71,7 +84,7 @@ export class AttendanceController {
   }
 
   @Get('class/:classId/summary')
-  @Roles('Admin', 'Form Teacher')
+  @Roles('Admin', 'Form Teacher', 'Subject Teacher')
   getClassSummary(
     @Param('classId', ParseIntPipe) classId: number,
     @Query('termId', ParseIntPipe) termId?: number,
@@ -87,7 +100,7 @@ export class AttendanceController {
   }
 
   @Patch(':id')
-  @Roles('Admin', 'Form Teacher')
+  @Roles('Admin', 'Form Teacher', 'Subject Teacher')
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateAttendanceDto: UpdateAttendanceDto,

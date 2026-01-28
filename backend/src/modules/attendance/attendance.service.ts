@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
-import { Attendance, AttendanceStatus } from '../../entities/attendance.entity';
+import { Attendance, AttendanceStatus, AttendancePeriod } from '../../entities/attendance.entity';
 import { CreateAttendanceDto } from './dto/create-attendance.dto';
 import { UpdateAttendanceDto } from './dto/update-attendance.dto';
 import { BulkAttendanceDto } from './dto/bulk-attendance.dto';
@@ -18,30 +18,97 @@ export class AttendanceService {
     private readonly activitiesService: ActivitiesService,
   ) {}
 
+  /**
+   * Get attendance status for a class on a specific date
+   * Returns whether morning/afternoon attendance has been marked
+   */
+  async getAttendanceStatus(classId: number, date: string) {
+    const records = await this.attendanceRepository.find({
+      where: {
+        classId,
+        date: new Date(date),
+      },
+    });
+
+    const morningRecords = records.filter(r => r.period === AttendancePeriod.MORNING);
+    const afternoonRecords = records.filter(r => r.period === AttendancePeriod.AFTERNOON);
+
+    const hasMorning = morningRecords.length > 0;
+    const hasAfternoon = afternoonRecords.length > 0;
+    const isComplete = hasMorning && hasAfternoon;
+
+    // Calculate statistics
+    const morningPresent = morningRecords.filter(r => r.status === AttendanceStatus.PRESENT || r.status === AttendanceStatus.LATE).length;
+    const morningAbsent = morningRecords.filter(r => r.status === AttendanceStatus.ABSENT).length;
+    const afternoonPresent = afternoonRecords.filter(r => r.status === AttendanceStatus.PRESENT || r.status === AttendanceStatus.LATE).length;
+    const afternoonAbsent = afternoonRecords.filter(r => r.status === AttendanceStatus.ABSENT).length;
+
+    return {
+      success: true,
+      data: {
+        hasMorning,
+        hasAfternoon,
+        isComplete,
+        nextPeriod: !hasMorning ? AttendancePeriod.MORNING : (!hasAfternoon ? AttendancePeriod.AFTERNOON : null),
+        morningCount: morningRecords.length,
+        afternoonCount: afternoonRecords.length,
+        morningPresent,
+        morningAbsent,
+        afternoonPresent,
+        afternoonAbsent,
+      },
+    };
+  }
+
   async create(createAttendanceDto: CreateAttendanceDto) {
+    const period = createAttendanceDto.period || AttendancePeriod.MORNING;
+
+    // Check if attendance already exists for this student, date, and period
     const existing = await this.attendanceRepository.findOne({
       where: {
         studentId: createAttendanceDto.studentId,
         date: new Date(createAttendanceDto.date),
+        period,
       },
     });
 
     if (existing) {
-      throw new ConflictException('Attendance already recorded for this date');
+      throw new ConflictException(`${period} attendance already recorded for this student on this date`);
     }
 
-    const attendance = this.attendanceRepository.create(createAttendanceDto);
+    const attendance = this.attendanceRepository.create({
+      ...createAttendanceDto,
+      period,
+    });
     const saved = await this.attendanceRepository.save(attendance);
 
     return {
       success: true,
       data: saved,
-      message: 'Attendance recorded successfully',
+      message: `${period} attendance recorded successfully`,
     };
   }
 
   async bulkCreate(bulkAttendanceDto: BulkAttendanceDto) {
-    const { classId, date, sessionId, termId, attendances } = bulkAttendanceDto;
+    const { classId, date, sessionId, termId, period, attendances } = bulkAttendanceDto;
+    const attendancePeriod = period || AttendancePeriod.MORNING;
+
+    // Check attendance status first
+    const status = await this.getAttendanceStatus(classId, date);
+    
+    // Validate that this period hasn't been marked yet
+    if (attendancePeriod === AttendancePeriod.MORNING && status.data.hasMorning) {
+      throw new BadRequestException('Morning attendance has already been marked for this class today');
+    }
+    
+    if (attendancePeriod === AttendancePeriod.AFTERNOON && status.data.hasAfternoon) {
+      throw new BadRequestException('Afternoon attendance has already been marked for this class today');
+    }
+
+    // If trying to mark afternoon without morning, reject
+    if (attendancePeriod === AttendancePeriod.AFTERNOON && !status.data.hasMorning) {
+      throw new BadRequestException('Morning attendance must be marked before afternoon attendance');
+    }
 
     const records = attendances.map((att) => ({
       studentId: att.studentId,
@@ -50,32 +117,27 @@ export class AttendanceService {
       sessionId,
       termId,
       status: att.status,
+      period: attendancePeriod,
     }));
-
-    // Delete existing attendance for this class and date
-    await this.attendanceRepository.delete({
-      classId,
-      date: new Date(date),
-    });
 
     const saved = await this.attendanceRepository.save(records);
 
     // Log activity
-    const presentCount = attendances.filter(a => a.status === 'Present').length;
+    const presentCount = attendances.filter(a => a.status === 'Present' || a.status === 'Late').length;
     const absentCount = attendances.filter(a => a.status === 'Absent').length;
     await this.activitiesService.logActivity(
       ActivityType.ATTENDANCE_MARKED,
-      'Attendance Marked',
-      `Attendance marked for ${attendances.length} students (${presentCount} present, ${absentCount} absent)`,
+      `${attendancePeriod} Attendance Marked`,
+      `${attendancePeriod} attendance marked for ${attendances.length} students (${presentCount} present, ${absentCount} absent)`,
       undefined,
       'Form Teacher',
-      { classId, date, presentCount, absentCount, total: attendances.length },
+      { classId, date, period: attendancePeriod, presentCount, absentCount, total: attendances.length },
     );
 
     return {
       success: true,
       data: saved,
-      message: 'Bulk attendance recorded successfully',
+      message: `${attendancePeriod} attendance recorded successfully for ${attendances.length} students`,
     };
   }
 
@@ -86,6 +148,7 @@ export class AttendanceService {
       sessionId,
       termId,
       status,
+      period,
       startDate,
       endDate,
       search,
@@ -120,6 +183,10 @@ export class AttendanceService {
       queryBuilder.andWhere('attendance.status = :status', { status });
     }
 
+    if (period) {
+      queryBuilder.andWhere('attendance.period = :period', { period });
+    }
+
     if (startDate && endDate) {
       queryBuilder.andWhere('attendance.date BETWEEN :startDate AND :endDate', {
         startDate,
@@ -134,7 +201,8 @@ export class AttendanceService {
       );
     }
 
-    queryBuilder.orderBy('attendance.date', 'DESC');
+    queryBuilder.orderBy('attendance.date', 'DESC')
+      .addOrderBy('attendance.period', 'ASC');
 
     const result = await paginate(queryBuilder, page, perPage);
 
@@ -160,14 +228,20 @@ export class AttendanceService {
     };
   }
 
-  async getClassByDate(classId: number, date: string) {
+  async getClassByDate(classId: number, date: string, period?: AttendancePeriod) {
+    const where: any = {
+      classId,
+      date: new Date(date),
+    };
+    
+    if (period) {
+      where.period = period;
+    }
+
     const records = await this.attendanceRepository.find({
-      where: {
-        classId,
-        date: new Date(date),
-      },
+      where,
       relations: ['student'],
-      order: { student: { firstName: 'ASC' } },
+      order: { period: 'ASC', student: { firstName: 'ASC' } },
     });
 
     return {

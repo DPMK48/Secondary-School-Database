@@ -19,6 +19,11 @@ export enum AttendanceStatus {
   EXCUSED = 'Excused',
 }
 
+export enum AttendancePeriod {
+  MORNING = 'Morning',
+  AFTERNOON = 'Afternoon',
+}
+
 @Entity('attendance')
 export class Attendance {
   @PrimaryGeneratedColumn()
@@ -43,6 +48,9 @@ export class Attendance {
 
   @Column({ type: 'enum', enum: AttendanceStatus })
   status: AttendanceStatus;
+
+  @Column({ type: 'enum', enum: AttendancePeriod, default: AttendancePeriod.MORNING })
+  period: AttendancePeriod;
 
   @Column({ name: 'session_id' })
   sessionId: number;

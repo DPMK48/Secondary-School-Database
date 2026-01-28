@@ -71,22 +71,29 @@ const Login: React.FC = () => {
 
     try {
       // First, check if role selection is needed
+      console.log('🔐 [LOGIN] Attempting login for:', username);
       const response = await authApi.login({ username, password });
+      console.log('🔐 [LOGIN] Response:', response);
       
       if (response.requiresRoleSelection && response.availableRoles && response.availableRoles.length > 1) {
         // Show role selection modal
+        console.log('🔐 [LOGIN] Multiple roles detected, showing modal:', response.availableRoles);
         setRoleSelection({
           isOpen: true,
           availableRoles: response.availableRoles,
           formTeacherClassName: response.user?.formTeacherClassName || null,
         });
+        return; // Important: stop here, don't proceed with login
       } else {
         // Single role or no selection needed - proceed with login
+        console.log('🔐 [LOGIN] Single role, proceeding with login');
         await login({ username, password });
         navigate(from, { replace: true });
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+    } catch (err: any) {
+      console.error('🔐 [LOGIN] Error:', err);
+      const message = err?.response?.data?.message || err?.message || 'Login failed';
+      setError(message);
     }
   };
 

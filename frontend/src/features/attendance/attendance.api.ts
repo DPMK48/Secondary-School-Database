@@ -1,12 +1,15 @@
 import api from '../../services/axios';
 import type { Attendance, PaginatedResponse, ApiResponse } from '../../types';
 
+export type AttendancePeriod = 'Morning' | 'Afternoon';
+
 export interface AttendanceFilters {
   studentId?: number;
   classId?: number;
   date?: string;
   termId?: number;
   sessionId?: number;
+  period?: AttendancePeriod;
   page?: number;
   perPage?: number;
 }
@@ -18,6 +21,7 @@ export interface MarkAttendanceData {
   status: 'Present' | 'Absent' | 'Late' | 'Excused';
   sessionId: number;
   termId: number;
+  period?: AttendancePeriod;
   remarks?: string;
 }
 
@@ -26,10 +30,24 @@ export interface BulkAttendanceData {
   date: string;
   sessionId: number;
   termId: number;
+  period?: AttendancePeriod;
   attendances: Array<{
     studentId: number;
     status: 'Present' | 'Absent' | 'Late' | 'Excused';
   }>;
+}
+
+export interface AttendanceStatusResponse {
+  hasMorning: boolean;
+  hasAfternoon: boolean;
+  isComplete: boolean;
+  nextPeriod: AttendancePeriod | null;
+  morningCount: number;
+  afternoonCount: number;
+  morningPresent: number;
+  morningAbsent: number;
+  afternoonPresent: number;
+  afternoonAbsent: number;
 }
 
 export const attendanceApi = {
@@ -98,4 +116,10 @@ export const attendanceApi = {
    */
   getReport: (params: { class_id?: number; start_date: string; end_date: string; term_id?: number; session_id?: number }) =>
     api.get<ApiResponse<any>>('/attendance/report', { params }),
+
+  /**
+   * Get attendance status for a class on a specific date (morning/afternoon completion)
+   */
+  getAttendanceStatus: (classId: number, date: string) =>
+    api.get<ApiResponse<AttendanceStatusResponse>>(`/attendance/status/${classId}/${date}`),
 };

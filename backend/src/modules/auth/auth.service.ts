@@ -44,20 +44,27 @@ export class AuthService {
   ) {}
 
   async login(loginDto: LoginDto): Promise<AuthResponse> {
+    console.log('🔐 [AUTH] Login attempt for username:', loginDto.username);
+    
     const user = await this.userRepository.findOne({
       where: { username: loginDto.username },
       relations: ['role'],
     });
 
     if (!user) {
+      console.log('🔐 [AUTH] User not found:', loginDto.username);
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    console.log('🔐 [AUTH] User found:', { id: user.id, username: user.username, isActive: user.isActive, roleId: user.roleId });
+
     if (!user.isActive) {
+      console.log('🔐 [AUTH] Account is deactivated');
       throw new UnauthorizedException('Account is deactivated');
     }
 
     const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
+    console.log('🔐 [AUTH] Password valid:', isPasswordValid);
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');

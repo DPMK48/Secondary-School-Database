@@ -6,7 +6,7 @@ import {
   IsString,
   IsOptional,
 } from 'class-validator';
-import { AttendanceStatus } from '../../../entities/attendance.entity';
+import { AttendanceStatus, AttendancePeriod } from '../../../entities/attendance.entity';
 
 export class CreateAttendanceDto {
   @IsNumber()
@@ -24,6 +24,10 @@ export class CreateAttendanceDto {
   @IsEnum(AttendanceStatus)
   @IsNotEmpty()
   status: AttendanceStatus;
+
+  @IsEnum(AttendancePeriod)
+  @IsOptional()
+  period?: AttendancePeriod;
 
   @IsNumber()
   @IsNotEmpty()

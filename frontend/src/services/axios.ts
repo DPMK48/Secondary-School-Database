@@ -47,11 +47,17 @@ axiosInstance.interceptors.response.use(
     });
 
     // Handle 401 Unauthorized - redirect to login
+    // But NOT for auth endpoints (login, public-stats)
     if (error.response?.status === 401) {
-      console.log('🚪 [AXIOS] Unauthorized - clearing auth');
-      localStorage.removeItem(STORAGE_KEYS.TOKEN);
-      localStorage.removeItem(STORAGE_KEYS.USER);
-      window.location.href = '/login';
+      const url = error.config?.url || '';
+      const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/public-stats');
+      
+      if (!isAuthEndpoint) {
+        console.log('🚪 [AXIOS] Unauthorized - clearing auth');
+        localStorage.removeItem(STORAGE_KEYS.TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.USER);
+        window.location.href = '/login';
+      }
     }
 
     return Promise.reject(error);

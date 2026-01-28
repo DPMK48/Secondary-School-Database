@@ -23,8 +23,8 @@ const ClassList: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { canManageClasses } = useRole();
-  const isSubjectTeacher = user?.role === 'subject_teacher';
-  const isFormTeacher = user?.role === 'form_teacher';
+  const isSubjectTeacher = user?.role === 'Subject Teacher';
+  const isFormTeacher = user?.role === 'Form Teacher';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [levelFilter, setLevelFilter] = useState('');

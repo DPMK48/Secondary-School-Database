@@ -12,12 +12,31 @@ import { useClassQuery } from '../../hooks/useClasses';
 import { useCurrentSession, useCurrentTerm } from '../../hooks/useSessionTerm';
 import { studentsApi } from './students.api';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '../../hooks/useAuth';
+import { useRole } from '../../hooks/useRole';
 
 const StudentDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [showFormModal, setShowFormModal] = useState(false);
   const studentId = parseInt(id || '0');
+  
+  // Get user role information
+  const { user } = useAuth();
+  const { isAdmin, canManageStudents } = useRole();
+  const isFormTeacher = user?.role === 'Form Teacher';
+  const isSubjectTeacher = user?.role === 'Subject Teacher';
+
+  // Determine back navigation based on role
+  const handleBackNavigation = () => {
+    if (isFormTeacher) {
+      navigate('/dashboard/my-class');
+    } else if (isSubjectTeacher) {
+      navigate('/dashboard/classes');
+    } else {
+      navigate('/dashboard/students');
+    }
+  };
 
   // Fetch student data from API
   const { data: studentResponse, isLoading: studentLoading, error: studentError } = useStudentQuery(studentId, {
@@ -147,8 +166,8 @@ const StudentDetail: React.FC = () => {
     return (
       <div className="space-y-4">
         <Alert variant="error">Failed to load student details. Please try again.</Alert>
-        <Button variant="outline" onClick={() => navigate('/dashboard/students')} className="mt-4">
-          Go back to Students
+        <Button variant="outline" onClick={handleBackNavigation} className="mt-4">
+          Go back
         </Button>
       </div>
     );
@@ -158,8 +177,8 @@ const StudentDetail: React.FC = () => {
     return (
       <div className="text-center py-12">
         <p className="text-secondary-500">Student not found</p>
-        <Button variant="outline" onClick={() => navigate('/dashboard/students')} className="mt-4">
-          Go back to Students
+        <Button variant="outline" onClick={handleBackNavigation} className="mt-4">
+          Go back
         </Button>
       </div>
     );
@@ -191,7 +210,7 @@ const StudentDetail: React.FC = () => {
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
-            onClick={() => navigate('/dashboard/students')}
+            onClick={handleBackNavigation}
             leftIcon={<ArrowLeft className="h-4 w-4" />}
           >
             Back
@@ -201,14 +220,17 @@ const StudentDetail: React.FC = () => {
             <p className="text-secondary-500">{student.admission_no}</p>
           </div>
         </div>
-        <div className="flex gap-3">
-          <Button variant="outline" leftIcon={<FileText className="h-4 w-4" />} onClick={() => navigate('/dashboard/reports/student')}>
-            Print Report
-          </Button>
-          <Button leftIcon={<Edit className="h-4 w-4" />} onClick={() => setShowFormModal(true)}>
-            Edit Profile
-          </Button>
-        </div>
+        {/* Only show Print Report and Edit Profile for Admin */}
+        {isAdmin && (
+          <div className="flex gap-3">
+            <Button variant="outline" leftIcon={<FileText className="h-4 w-4" />} onClick={() => navigate('/dashboard/reports/student')}>
+              Print Report
+            </Button>
+            <Button leftIcon={<Edit className="h-4 w-4" />} onClick={() => setShowFormModal(true)}>
+              Edit Profile
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Profile Card */}
@@ -348,16 +370,18 @@ const StudentDetail: React.FC = () => {
         </div>
       </Card>
 
-      {/* Student Form Modal */}
-      <StudentForm
-        isOpen={showFormModal}
-        onClose={() => setShowFormModal(false)}
-        student={student}
-        onSave={(data) => {
-          console.log('Updating student:', data);
-          setShowFormModal(false);
-        }}
-      />
+      {/* Student Form Modal - Only for Admin */}
+      {isAdmin && (
+        <StudentForm
+          isOpen={showFormModal}
+          onClose={() => setShowFormModal(false)}
+          student={student}
+          onSave={(data) => {
+            console.log('Updating student:', data);
+            setShowFormModal(false);
+          }}
+        />
+      )}
     </div>
   );
 };

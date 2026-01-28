@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Button,
   Select,
@@ -12,15 +13,10 @@ import {
   Input,
   Spinner,
 } from '../../components/common';
-import {
-  mockStudents,
-  mockClasses,
-  mockSubjects,
-  getClassDisplayName,
-  generateMockResultsForClassSubject,
-} from '../../utils/mockData';
 import { getFullName, calculateGrade, getGradeVariant, cn } from '../../utils/helpers';
 import { useCurrentSession, useCurrentTerm, useSessions, useTerms } from '../../hooks/useSessionTerm';
+import { useClassesQuery } from '../../hooks/useClasses';
+import { resultsApi } from './results.api';
 import {
   CheckCircle,
   Search,
@@ -46,12 +42,24 @@ interface CompiledStudentResult {
   status: 'pending' | 'approved';
 }
 
+// Helper function to get class display name
+const getClassDisplayName = (cls: any): string => {
+  if (!cls) return '';
+  const name = cls.className || cls.class_name || '';
+  const arm = cls.arm || '';
+  return `${name}${arm ? ` ${arm}` : ''}`.trim();
+};
+
 const ResultApproval: React.FC = () => {
   // Fetch session and term data from backend
   const { data: currentSession } = useCurrentSession();
   const { data: currentTerm } = useCurrentTerm();
   const { data: sessions } = useSessions();
   const { data: terms } = useTerms();
+  
+  // Fetch classes from backend
+  const { data: classesData, isLoading: classesLoading } = useClassesQuery();
+  const classes = classesData?.data || [];
   
   const [selectedSession, setSelectedSession] = useState('');
   const [selectedTerm, setSelectedTerm] = useState('');
@@ -68,6 +76,7 @@ const ResultApproval: React.FC = () => {
       setSelectedTerm(currentTerm.id?.toString() || '');
     }
   }, [currentTerm, selectedTerm]);
+  
   const [selectedClass, setSelectedClass] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [principalRemarks, setPrincipalRemarks] = useState<Record<number, string>>({});
@@ -76,57 +85,62 @@ const ResultApproval: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Get compiled results from all form teachers
+  // Fetch compiled results from form teacher when class, term, session are selected
+  const { 
+    data: compilationData, 
+    isLoading: compilationLoading,
+    refetch: refetchCompilation,
+  } = useQuery({
+    queryKey: ['form-teacher-compilation', selectedClass, selectedTerm, selectedSession],
+    queryFn: () => resultsApi.getFormTeacherCompilation(parseInt(selectedClass), {
+      term_id: parseInt(selectedTerm),
+      session_id: parseInt(selectedSession),
+    }),
+    enabled: !!selectedClass && !!selectedTerm && !!selectedSession,
+  });
+
+  // Transform API data to the format expected by the component
   const compiledResults = useMemo((): CompiledStudentResult[] => {
-    if (!selectedClass) return [];
+    const data = compilationData?.data?.data || compilationData?.data || [];
     
-    const classId = parseInt(selectedClass);
-    const classStudents = mockStudents.filter(
-      (s) => s.current_class_id === classId && s.status === 'Active'
-    );
-    const classSubjects = mockSubjects.filter((s) => s.level === mockClasses.find(c => c.id === classId)?.level);
-
-    return classStudents.map((student, index) => {
-      const subjectScores = classSubjects.map((subject) => {
-        const results = generateMockResultsForClassSubject(classId, subject.id).filter(
-          (r) => r.student_id === student.id
-        );
-        const test1 = results.find((r) => r.assessment_id === 1)?.score || 0;
-        const test2 = results.find((r) => r.assessment_id === 2)?.score || 0;
-        const test3 = results.find((r) => r.assessment_id === 3)?.score || 0;
-        const exam = results.find((r) => r.assessment_id === 4)?.score || 0;
-        return test1 + test2 + test3 + exam;
-      });
-
-      const totalScore = subjectScores.reduce((sum, score) => sum + score, 0);
-      const averageScore = subjectScores.length > 0 ? totalScore / subjectScores.length : 0;
-      const overallGrade = calculateGrade(averageScore).grade;
-
-      // Mock form teacher remarks
-      const remarks = [
-        'Excellent performance. Keep it up!',
-        'Good work. Needs improvement in some areas.',
-        'Satisfactory progress this term.',
-        'Must work harder next term.',
-      ];
-
+    if (!Array.isArray(data) || data.length === 0) return [];
+    
+    const selectedClassObj = classes.find((c: any) => c.id === parseInt(selectedClass));
+    
+    return data.map((item: any, index: number) => {
+      const student = item.student || {};
+      const firstName = student.firstName || student.first_name || '';
+      const lastName = student.lastName || student.last_name || '';
+      const admissionNo = student.admissionNo || student.admission_no || '';
+      
+      // Calculate number of subjects from subjects array
+      const subjects = item.subjects || [];
+      const numberOfSubjects = subjects.length;
+      
+      // Average score from backend
+      const averageScore = item.averageScore || item.average_score || 0;
+      const totalScore = item.totalScore || item.total_score || 0;
+      
+      // Get grade from average
+      const gradeInfo = calculateGrade(averageScore);
+      
       return {
-        student_id: student.id,
-        student_name: getFullName(student.first_name, student.last_name),
-        admission_no: student.admission_no,
-        class_id: classId,
-        class_name: getClassDisplayName(mockClasses.find(c => c.id === classId)!),
+        student_id: student.id || item.studentId,
+        student_name: getFullName(firstName, lastName),
+        admission_no: admissionNo,
+        class_id: parseInt(selectedClass),
+        class_name: getClassDisplayName(selectedClassObj),
         average_score: averageScore,
-        position: index + 1,
-        overall_grade: overallGrade,
-        form_teacher_remark: remarks[index % remarks.length],
+        position: item.position || index + 1,
+        overall_grade: gradeInfo.grade,
+        form_teacher_remark: item.formTeacherRemark || item.form_teacher_remark || '',
         total_score: totalScore,
-        number_of_subjects: classSubjects.length,
-        status: index % 3 === 0 ? 'approved' : 'pending',
+        number_of_subjects: numberOfSubjects,
+        status: item.isApproved ? 'approved' : 'pending',
       };
-    }).sort((a, b) => b.average_score - a.average_score)
-      .map((result, index) => ({ ...result, position: index + 1 }));
-  }, [selectedClass]);
+    }).sort((a: CompiledStudentResult, b: CompiledStudentResult) => b.average_score - a.average_score)
+      .map((result: CompiledStudentResult, index: number) => ({ ...result, position: index + 1 }));
+  }, [compilationData, selectedClass, classes]);
 
   // Filter results
   const filteredResults = useMemo(() => {
@@ -166,37 +180,24 @@ const ResultApproval: React.FC = () => {
         return;
       }
 
-      // Prepare data for backend
-      const approvalData = filteredResults
-        .filter(r => r.status === 'pending')
-        .map((student) => ({
-          student_id: student.student_id,
-          class_id: student.class_id,
-          session: selectedSession,
-          term_id: parseInt(selectedTerm),
-          average_score: student.average_score,
-          position: student.position,
-          overall_grade: student.overall_grade,
-          form_teacher_remark: student.form_teacher_remark,
-          principal_remark: principalRemarks[student.student_id],
-          principal_signature: signature,
-          status: 'approved',
-          approved_at: new Date().toISOString(),
-        }));
+      // Call the approve API
+      await resultsApi.approveResults({
+        class_id: parseInt(selectedClass),
+        term_id: parseInt(selectedTerm),
+        session_id: parseInt(selectedSession),
+        approved_by: 1, // TODO: Get from current user context
+      });
 
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      // TODO: Uncomment when backend API is ready
-      // await resultsApi.approveResults(approvalData);
+      const approvedCount = filteredResults.filter(r => r.status === 'pending').length;
 
       setSuccessMessage(
-        `Successfully approved and published results for ${approvalData.length} students. Results are now available in the Reports section.`
+        `Successfully approved and published results for ${approvedCount} students. Results are now available in the Reports section.`
       );
 
-      // Clear form
+      // Clear form and refetch
       setPrincipalRemarks({});
       setSignature('');
+      refetchCompilation();
     } catch (error) {
       alert('Failed to approve results. Please try again.');
       console.error('Error approving results:', error);
@@ -376,7 +377,10 @@ const ResultApproval: React.FC = () => {
               label="Class"
               options={[
                 { value: '', label: 'Select class...' },
-                ...mockClasses.map((c) => ({ value: c.id.toString(), label: getClassDisplayName(c) })),
+                ...classes.map((c: any) => ({ 
+                  value: c.id.toString(), 
+                  label: getClassDisplayName(c) 
+                })),
               ]}
               value={selectedClass}
               onChange={setSelectedClass}
@@ -397,8 +401,8 @@ const ResultApproval: React.FC = () => {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>
-                Compiled Results - {mockClasses.find(c => c.id === parseInt(selectedClass))
-                  ? getClassDisplayName(mockClasses.find(c => c.id === parseInt(selectedClass))!)
+                Compiled Results - {classes.find((c: any) => c.id === parseInt(selectedClass))
+                  ? getClassDisplayName(classes.find((c: any) => c.id === parseInt(selectedClass))!)
                   : ''}
               </CardTitle>
               <div className="flex gap-2">
@@ -413,42 +417,55 @@ const ResultApproval: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <Table
-              columns={columns}
-              data={filteredResults}
-              keyExtractor={(item) => item.student_id.toString()}
-            />
-
-            {/* Principal Signature */}
-            <div className="mt-6 p-4 bg-secondary-50 rounded-lg">
-              <div className="flex items-center gap-3 mb-3">
-                <FileSignature className="h-5 w-5 text-secondary-600" />
-                <h3 className="font-semibold text-secondary-900">Principal Signature</h3>
+            {compilationLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Spinner size="lg" />
               </div>
-              <Input
-                type="text"
-                value={signature}
-                onChange={(e) => setSignature(e.target.value)}
-                placeholder="Enter principal name/signature..."
-                className="max-w-md"
-              />
-            </div>
+            ) : filteredResults.length === 0 ? (
+              <div className="text-center py-12">
+                <CheckCircle className="h-12 w-12 text-secondary-300 mx-auto mb-4" />
+                <p className="text-secondary-500">No results found for this class. Results will appear here once form teachers submit them.</p>
+              </div>
+            ) : (
+              <>
+                <Table
+                  columns={columns}
+                  data={filteredResults}
+                  keyExtractor={(item) => item.student_id.toString()}
+                />
 
-            {/* Action Buttons */}
-            <div className="mt-6 flex justify-end gap-3">
-              <Button
-                onClick={handleApproveAndPublish}
-                disabled={!allRemarksComplete || isSaving}
-                leftIcon={isSaving ? <Spinner size="sm" /> : <Send className="h-4 w-4" />}
-              >
-                {isSaving ? 'Approving...' : 'Approve & Publish to Reports'}
-              </Button>
-            </div>
-            
-            {!allRemarksComplete && filteredResults.some(r => r.status === 'pending') && (
-              <p className="text-sm text-orange-600 mt-2 text-right">
-                Please add principal remarks for all pending students and signature before approving
-              </p>
+                {/* Principal Signature */}
+                <div className="mt-6 p-4 bg-secondary-50 rounded-lg">
+                  <div className="flex items-center gap-3 mb-3">
+                    <FileSignature className="h-5 w-5 text-secondary-600" />
+                    <h3 className="font-semibold text-secondary-900">Principal Signature</h3>
+                  </div>
+                  <Input
+                    type="text"
+                    value={signature}
+                    onChange={(e) => setSignature(e.target.value)}
+                    placeholder="Enter principal name/signature..."
+                    className="max-w-md"
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="mt-6 flex justify-end gap-3">
+                  <Button
+                    onClick={handleApproveAndPublish}
+                    disabled={!allRemarksComplete || isSaving}
+                    leftIcon={isSaving ? <Spinner size="sm" /> : <Send className="h-4 w-4" />}
+                  >
+                    {isSaving ? 'Approving...' : 'Approve & Publish to Reports'}
+                  </Button>
+                </div>
+                
+                {!allRemarksComplete && filteredResults.some(r => r.status === 'pending') && (
+                  <p className="text-sm text-orange-600 mt-2 text-right">
+                    Please add principal remarks for all pending students and signature before approving
+                  </p>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

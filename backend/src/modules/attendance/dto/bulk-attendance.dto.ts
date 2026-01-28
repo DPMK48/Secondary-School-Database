@@ -6,8 +6,9 @@ import {
   IsEnum,
   IsDateString,
   ValidateNested,
+  IsOptional,
 } from 'class-validator';
-import { AttendanceStatus } from '../../../entities/attendance.entity';
+import { AttendanceStatus, AttendancePeriod } from '../../../entities/attendance.entity';
 
 class StudentAttendance {
   @IsNumber()
@@ -35,6 +36,10 @@ export class BulkAttendanceDto {
   @IsNumber()
   @IsNotEmpty()
   termId: number;
+
+  @IsEnum(AttendancePeriod)
+  @IsOptional()
+  period?: AttendancePeriod;
 
   @IsArray()
   @ValidateNested({ each: true })

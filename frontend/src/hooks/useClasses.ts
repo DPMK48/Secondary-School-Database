@@ -63,10 +63,14 @@ export const useDeleteClassMutation = () => {
   });
 };
 
-export const useClassStudentsQuery = (classId: number, options?: { enabled?: boolean }) => {
+export const useClassStudentsQuery = (
+  classId: number,
+  params?: { page?: number; perPage?: number },
+  options?: { enabled?: boolean }
+) => {
   return useQuery({
-    queryKey: [...CLASSES_QUERY_KEY, classId, 'students'],
-    queryFn: () => classesApi.getStudents(classId),
+    queryKey: [...CLASSES_QUERY_KEY, classId, 'students', params],
+    queryFn: () => classesApi.getStudents(classId, params),
     refetchOnMount: true,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,

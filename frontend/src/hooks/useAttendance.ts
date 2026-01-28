@@ -129,3 +129,20 @@ export const useDeleteAttendanceMutation = () => {
     },
   });
 };
+
+export const useAttendanceStatusQuery = (
+  classId: number,
+  date: string,
+  options?: { enabled?: boolean }
+) => {
+  return useQuery({
+    queryKey: [...ATTENDANCE_QUERY_KEY, 'status', classId, date],
+    queryFn: async () => {
+      const response = await attendanceApi.getAttendanceStatus(classId, date);
+      return response.data;
+    },
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    enabled: options?.enabled !== false && !!classId && !!date,
+  });
+};

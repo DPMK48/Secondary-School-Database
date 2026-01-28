@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRole } from '../../hooks/useRole';
+import { useAuth } from '../../hooks/useAuth';
 import {
   Button,
   Input,
@@ -38,7 +39,10 @@ import ClassForm from './ClassForm';
 const ClassStudents: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { canManageClasses, canManageStudents } = useRole();
+  const { user } = useAuth();
+  const { canManageClasses, canManageStudents, isAdmin } = useRole();
+  const isFormTeacher = user?.role === 'Form Teacher';
+  const isSubjectTeacher = user?.role === 'Subject Teacher';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [genderFilter, setGenderFilter] = useState('');
@@ -53,7 +57,7 @@ const ClassStudents: React.FC = () => {
   });
 
   // Fetch students in this class
-  const { data: studentsResponse, isLoading: studentsLoading, error: studentsError } = useClassStudentsQuery(classId, {
+  const { data: studentsResponse, isLoading: studentsLoading, error: studentsError } = useClassStudentsQuery(classId, undefined, {
     enabled: !!classId,
   });
 
@@ -155,6 +159,15 @@ const ClassStudents: React.FC = () => {
     { value: 'Female', label: 'Female' },
   ];
 
+  // Handle back navigation based on role
+  const handleBackNavigation = () => {
+    if (isFormTeacher) {
+      navigate('/dashboard/my-class');
+    } else {
+      navigate('/dashboard/classes');
+    }
+  };
+
   if (classLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -167,8 +180,8 @@ const ClassStudents: React.FC = () => {
     return (
       <div className="space-y-4">
         <Alert variant="error">Failed to load class details. Please try again.</Alert>
-        <Button variant="outline" onClick={() => navigate('/dashboard/classes')} className="mt-4">
-          Back to Classes
+        <Button variant="outline" onClick={handleBackNavigation} className="mt-4">
+          Go back
         </Button>
       </div>
     );
@@ -178,8 +191,8 @@ const ClassStudents: React.FC = () => {
     return (
       <div className="text-center py-12">
         <p className="text-secondary-500">Class not found</p>
-        <Button variant="outline" onClick={() => navigate('/dashboard/classes')} className="mt-4">
-          Back to Classes
+        <Button variant="outline" onClick={handleBackNavigation} className="mt-4">
+          Go back
         </Button>
       </div>
     );
@@ -229,17 +242,16 @@ const ClassStudents: React.FC = () => {
     {
       key: 'actions',
       label: 'Actions',
-      render: (_value: unknown, row: Student) =>
-        canManageStudents ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            leftIcon={<Eye className="h-4 w-4" />}
-            onClick={() => navigate(`/dashboard/students/${row.id}`)}
-          >
-            View
-          </Button>
-        ) : null,
+      render: (_value: unknown, row: Student) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={<Eye className="h-4 w-4" />}
+          onClick={() => navigate(`/dashboard/students/${row.id}`)}
+        >
+          View
+        </Button>
+      ),
     },
   ];
 
@@ -247,7 +259,7 @@ const ClassStudents: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard/classes')}>
+        <Button variant="ghost" size="sm" onClick={handleBackNavigation}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
@@ -387,9 +399,9 @@ const ClassStudents: React.FC = () => {
               <p className="text-secondary-500 mb-4">
                 {searchQuery || genderFilter
                   ? 'Try adjusting your search filters'
-                  : 'Add students to this class from the Students page'}
+                  : isAdmin ? 'Add students to this class from the Students page' : 'No students enrolled in this class yet'}
               </p>
-              {canManageStudents && !searchQuery && !genderFilter && (
+              {isAdmin && !searchQuery && !genderFilter && (
                 <Button onClick={() => navigate('/dashboard/students')}>
                   Go to Students
                 </Button>
@@ -438,9 +450,6 @@ const ClassStudents: React.FC = () => {
         isOpen={showFormModal}
         onClose={() => setShowFormModal(false)}
         classData={classResponse?.data as Class}
-        onSuccess={() => {
-          setShowFormModal(false);
-        }}
       />
     </div>
   );

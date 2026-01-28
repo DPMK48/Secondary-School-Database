@@ -51,6 +51,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'compile_results',
     'add_remarks',
     'view_reports',
+    'manage_attendance',
+    'view_attendance',
   ],
   'Subject Teacher': [
     'enter_scores',
@@ -75,7 +77,6 @@ export const NAV_ITEMS = {
   'Form Teacher': [
     { label: 'Dashboard', path: '/dashboard', icon: 'LayoutDashboard' },
     { label: 'My Class', path: '/dashboard/classes', icon: 'School' },
-    { label: 'Students', path: '/dashboard/students', icon: 'Users' },
     { label: 'Attendance', path: '/dashboard/attendance', icon: 'CalendarCheck' },
     { label: 'Results', path: '/dashboard/results', icon: 'ClipboardList' },
     { label: 'Reports', path: '/dashboard/reports', icon: 'FileText' },
