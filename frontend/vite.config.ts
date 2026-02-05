@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icons/logo.png'],
       manifest: {
-        name: 'Armburu Model School - Result Management System',
-        short_name: 'Armburu Model School',
+        name: 'School Management System - School Management System',
+        short_name: 'School Management System',
         description: 'Comprehensive school result management system for managing student results, attendance, and academic records',
         theme_color: '#3b82f6',
         background_color: '#ffffff',

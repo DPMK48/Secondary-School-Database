@@ -278,7 +278,7 @@ const AttendanceView: React.FC = () => {
         </head>
         <body>
           <div class="header">
-            <h1>Armburu Model School</h1>
+            <h1>School Management System</h1>
             <h2>Attendance Report</h2>
           </div>
           <div class="info">
@@ -321,7 +321,7 @@ const AttendanceView: React.FC = () => {
             </div>
           ` : ''}
           <div class="footer">
-            <p>Printed from Armburu Model School Management System</p>
+            <p>Printed from School Management System Management System</p>
           </div>
         </body>
       </html>

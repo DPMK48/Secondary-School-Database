@@ -128,8 +128,8 @@ const Dashboard: React.FC = () => {
     { perPage: 1 },
     { enabled: isAuthenticated }
   );
-  const { data: currentSession, isLoading: sessionLoading } = useCurrentSession();
-  const { data: currentTerm, isLoading: termLoading } = useCurrentTerm();
+  const { data: currentSession, isLoading: sessionLoading, isError: sessionError } = useCurrentSession();
+  const { data: currentTerm, isLoading: termLoading, isError: termError } = useCurrentTerm();
   const [recentActivities, setRecentActivities] = useState<ActivityType[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
 
@@ -190,14 +190,26 @@ const Dashboard: React.FC = () => {
     const totalSubjects = subjectsData?.meta?.total || 0;
     
     // Session and term data is already extracted by the hooks
+    // Show appropriate text based on loading/error/data states
+    const getSessionDisplay = () => {
+      if (sessionLoading) return { sessionName: 'Loading...' };
+      if (sessionError || !currentSession) return { sessionName: 'Not Set' };
+      return currentSession;
+    };
+    
+    const getTermDisplay = () => {
+      if (termLoading) return { termName: 'Loading...' };
+      if (termError || !currentTerm) return { termName: 'Not Set' };
+      return currentTerm;
+    };
 
     return {
       total_students: totalStudents,
       total_teachers: totalTeachers,
       total_classes: totalClasses,
       total_subjects: totalSubjects,
-      current_session: currentSession || { sessionName: 'Loading...' },
-      current_term: currentTerm || { termName: 'Loading...' },
+      current_session: getSessionDisplay(),
+      current_term: getTermDisplay(),
     };
   }, [
     studentsData?.meta?.total, 
@@ -205,7 +217,11 @@ const Dashboard: React.FC = () => {
     classesData?.meta?.total, 
     subjectsData?.meta?.total,
     currentSession,
-    currentTerm
+    currentTerm,
+    sessionLoading,
+    termLoading,
+    sessionError,
+    termError
   ]);
 
   // Mock teacher ID (in real app, get from auth context)

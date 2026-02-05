@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '../services/settings.service';
 
 /**
@@ -11,12 +11,14 @@ export const useCurrentSession = () => {
     queryFn: settingsApi.getCurrentSession,
     staleTime: 0,
     refetchOnMount: true,
+    retry: 1,
+    refetchOnWindowFocus: true,
   });
 
   return {
     ...query,
     // Extract data from API response format { success: true, data: {...} }
-    data: query.data?.data || query.data,
+    data: query.data?.data || query.data || null,
   };
 };
 
@@ -30,12 +32,14 @@ export const useCurrentTerm = () => {
     queryFn: settingsApi.getCurrentTerm,
     staleTime: 0,
     refetchOnMount: true,
+    retry: 1,
+    refetchOnWindowFocus: true,
   });
 
   return {
     ...query,
     // Extract data from API response format { success: true, data: {...} }
-    data: query.data?.data || query.data,
+    data: query.data?.data || query.data || null,
   };
 };
 
@@ -78,13 +82,30 @@ export const useTerms = () => {
  * Combined hook for getting current session and term
  */
 export const useSessionTerm = () => {
-  const { data: sessionData, isLoading: isLoadingSession } = useCurrentSession();
-  const { data: termData, isLoading: isLoadingTerm } = useCurrentTerm();
+  const { data: sessionData, isLoading: isLoadingSession, isError: isSessionError } = useCurrentSession();
+  const { data: termData, isLoading: isLoadingTerm, isError: isTermError } = useCurrentTerm();
 
   return {
     // Data is already extracted by useCurrentSession and useCurrentTerm
     currentSession: sessionData || null,
     currentTerm: termData || null,
     isLoading: isLoadingSession || isLoadingTerm,
+    isError: isSessionError || isTermError,
   };
+};
+
+/**
+ * Hook to invalidate session/term cache - call after updating current session/term
+ */
+export const useInvalidateSessionTerm = () => {
+  const queryClient = useQueryClient();
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['currentSession'] });
+    queryClient.invalidateQueries({ queryKey: ['currentTerm'] });
+    queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    queryClient.invalidateQueries({ queryKey: ['terms'] });
+  };
+
+  return invalidate;
 };

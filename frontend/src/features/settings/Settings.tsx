@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import { useInvalidateSessionTerm } from '../../hooks/useSessionTerm';
 import { Button, Input, Card, CardHeader, CardTitle, CardContent, Alert, Select, useToast, Spinner } from '../../components/common';
 import { Lock, Bell, Calendar, School, Save } from 'lucide-react';
 import { settingsApi, type SessionData, type TermData } from '../../services/settings.service';
@@ -7,6 +8,7 @@ import { settingsApi, type SessionData, type TermData } from '../../services/set
 const Settings: React.FC = () => {
   const { user } = useAuth();
   const toast = useToast();
+  const invalidateSessionTerm = useInvalidateSessionTerm();
   const [showSuccess, setShowSuccess] = useState(false);
   const [isLoadingPassword, setIsLoadingPassword] = useState(false);
   const [isLoadingSystem, setIsLoadingSystem] = useState(false);
@@ -145,6 +147,9 @@ const Settings: React.FC = () => {
       
       // Reload current session and term
       await loadSessionsAndTerms();
+      
+      // Invalidate React Query cache so all dashboards see the new session/term
+      invalidateSessionTerm();
       
       toast.success('Current session and term updated successfully!');
     } catch (error: any) {

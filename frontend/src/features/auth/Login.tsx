@@ -232,7 +232,7 @@ const Login: React.FC = () => {
             <GraduationCap className="h-24 w-24 mx-auto opacity-90" />
           </div>
           <h2 className="text-3xl font-bold mb-4">
-            Armburu Model School Management System
+            School Management System
           </h2>
           <p className="text-lg text-primary-100 mb-8">
             Manage student results, attendance, and academic records efficiently and effectively.
